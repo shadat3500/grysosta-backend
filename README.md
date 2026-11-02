@@ -24,6 +24,10 @@ With Docker (MongoDB + API): `docker compose up --build`
 
 Without `BREVO_API_KEY` emails are logged to the console; without `TURNSTILE_SECRET` the bot check is skipped (development only).
 
+## Postman
+
+Import [`postman/GRYSOSTA-API.postman_collection.json`](postman/GRYSOSTA-API.postman_collection.json) into Postman (86 requests, all endpoints). See [`postman/README.md`](postman/README.md).
+
 ## Architecture (module based)
 
 ```

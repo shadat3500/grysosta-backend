@@ -6,7 +6,7 @@ import { BadRequest, NotFound } from "../../common/errors";
 import { magicLinkLimiter, signupLimiter, trackingLimiter } from "../../common/rateLimit";
 import { clientIp, ipCountry, userAgent, visitorHash } from "../../common/request";
 import { verifyBotToken } from "../../common/turnstile";
-import { env } from "../../config/env";
+import { env, isProd } from "../../config/env";
 import { settingsService } from "../settings/settings.service";
 import { contentService } from "../content/content.service";
 import { Announcement } from "../announcements/announcement.model";
@@ -113,12 +113,14 @@ const magicSchema = z.object({ email: z.string().trim().toLowerCase().email(), l
 publicRouter.post("/my-referrals/request", magicLinkLimiter, validate(magicSchema), async (req, res) => {
   const m = await Member.findOne({ email: req.body.email }).lean();
   const r = m ? await Referrer.findOne({ memberId: m._id }).lean() : null;
+  let devMagicToken: string | undefined;
   if (m && r) {
     const token = await createSession("magic", r._id, 30 * 60_000);
+    if (!isProd && !env.BREVO_API_KEY) devMagicToken = token; // local testing only (no real email provider)
     const lang = (m.language as "en" | "es") ?? req.body.lang;
     await emailService.enqueue("E5", { email: m.email, name: m.firstName, lang, memberId: null }, { first_name: m.firstName, magic_link: `${env.SITE_URL}/${lang}/my-referrals?token=${token}` });
   }
-  ok(res, { message: "If this email belongs to a referrer, a magic link has been sent." }); // no enumeration
+  ok(res, { message: "If this email belongs to a referrer, a magic link has been sent.", ...(devMagicToken ? { devMagicToken } : {}) }); // no enumeration
 });
 
 publicRouter.post("/my-referrals/verify", magicLinkLimiter, validate(tokenSchema), async (req, res) => {

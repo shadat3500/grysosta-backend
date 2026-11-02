@@ -1,0 +1,3528 @@
+{
+  "info": {
+    "name": "GRYSOSTA API",
+    "_postman_id": "6b1d3f5e-2c4a-4f8e-9a1b-8f2e6c4a1b3d",
+    "description": "REST API for the GRYSOSTA VIP landing page, referral system and admin panel.\n\n**Start here:**\n1. Set `serverUrl` (e.g. http://localhost:4000 or your live API), `adminEmail` and `adminPassword` in the collection *Variables* tab.\n2. Run **3. Auth › Login** — the token is saved automatically.\n3. Run **1. Public › Signup — join referral program** to get a `referralCode`.\n4. Run **A5 › List** and **A6 › List** to fill `memberId` and `referrerId`.\n\nRequests save IDs/tokens into collection variables, so the folders can be run top to bottom (Collection Runner).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "serverUrl",
+      "value": "http://localhost:4000"
+    },
+    {
+      "key": "baseUrl",
+      "value": "{{serverUrl}}/api/v1"
+    },
+    {
+      "key": "adminEmail",
+      "value": "admin@grysosta.com"
+    },
+    {
+      "key": "adminPassword",
+      "value": "grysosta2026"
+    },
+    {
+      "key": "token",
+      "value": ""
+    },
+    {
+      "key": "challengeToken",
+      "value": ""
+    },
+    {
+      "key": "referralCode",
+      "value": ""
+    },
+    {
+      "key": "referrerEmail",
+      "value": ""
+    },
+    {
+      "key": "magicToken",
+      "value": ""
+    },
+    {
+      "key": "referrerToken",
+      "value": ""
+    },
+    {
+      "key": "memberId",
+      "value": ""
+    },
+    {
+      "key": "unsubscribeToken",
+      "value": ""
+    },
+    {
+      "key": "referrerId",
+      "value": ""
+    },
+    {
+      "key": "announcementId",
+      "value": ""
+    },
+    {
+      "key": "draftId",
+      "value": ""
+    },
+    {
+      "key": "saleId",
+      "value": ""
+    },
+    {
+      "key": "emailLogId",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{serverUrl}}/health",
+          "host": [
+            "{{serverUrl}}"
+          ],
+          "path": [
+            "health"
+          ]
+        },
+        "auth": {
+          "type": "noauth"
+        },
+        "description": "Server + database status."
+      }
+    },
+    {
+      "name": "3. Auth (A1)",
+      "description": "Run **Login** first. The token is saved to `token` and used by every admin request (collection auth = Bearer {{token}}).",
+      "item": [
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Returns `token`. If 2-step login is enabled you get `{ twoFactorRequired: true, challengeToken }` → use *Verify 2-step code*. 5 wrong passwords lock the account for 15 minutes (423).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));",
+                  "const j = pm.response.json();",
+                  "if (j.data && j.data.token) pm.collectionVariables.set(\"token\", j.data.token);",
+                  "if (j.data && j.data.challengeToken) pm.collectionVariables.set(\"challengeToken\", j.data.challengeToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Verify 2-step code",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/2fa/verify",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "2fa",
+                "verify"
+              ]
+            },
+            "description": "Only when 2-step login is enabled. `code` = 6 digits from the authenticator app.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"challengeToken\": \"{{challengeToken}}\",\n  \"code\": \"123456\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json(); if (j.success && j.data.token) pm.collectionVariables.set(\"token\", j.data.token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Me",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "me"
+              ]
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Forgot password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/forgot-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "forgot-password"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{adminEmail}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reset password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/reset-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "reset-password"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"PASTE_TOKEN_FROM_EMAIL\",\n  \"password\": \"new-strong-password\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Change password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/change-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "change-password"
+              ]
+            },
+            "description": "Signs out the other sessions.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currentPassword\": \"{{adminPassword}}\",\n  \"newPassword\": \"{{adminPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2-step: setup",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/2fa/setup",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "2fa",
+                "setup"
+              ]
+            },
+            "description": "Returns `secret` and `otpauthUrl` (show as QR code in the authenticator app)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2-step: enable",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/2fa/enable",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "2fa",
+                "enable"
+              ]
+            },
+            "description": "Code from the authenticator app.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"123456\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "2-step: disable",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/2fa/disable",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "2fa",
+                "disable"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"123456\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "1. Public (landing page)",
+      "description": "Endpoints the public website calls. No admin login needed.",
+      "item": [
+        {
+          "name": "Site config (settings, content, announcements)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/public/site",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "public",
+                "site"
+              ]
+            },
+            "description": "Landing page data: prices, site mode, commission %, texts, FAQ, policy pages, images, active announcements. Book links + general VIP code only appear in launch mode.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Signup — join referral program (E2)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/public/signup",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "public",
+                "signup"
+              ]
+            },
+            "description": "Creates the unique code (GSTA + name + 2 digits) and link. Saves `referralCode` and `referrerEmail` for the next requests.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"John\",\n  \"lastName\": \"Smith\",\n  \"email\": \"john.{{$timestamp}}@example.com\",\n  \"language\": \"en\",\n  \"joinReferral\": true,\n  \"consent\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));",
+                  "const j = pm.response.json();",
+                  "if (j.data && j.data.code) { pm.collectionVariables.set(\"referralCode\", j.data.code); pm.collectionVariables.set(\"referrerEmail\", j.data.member.email); }",
+                  "pm.test(\"got a GSTA code\", () => pm.expect(j.data.code).to.match(/^GSTA[A-Z]+\\d{2,4}$/));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Record visit (with ?ref=)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/public/visits",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "public",
+                "visits"
+              ]
+            },
+            "description": "Call on every page open. Counts the daily visitor. With a valid `ref` it records a referral visit (once per visitor per day) and sets the 60-day `gsta_ref` cookie. Returns the referrer's first name for the welcome bar.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"lang\": \"en\",\n  \"ref\": \"{{referralCode}}\",\n  \"utmSource\": \"facebook\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Referrer lookup (welcome bar)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/public/referrers/{{referralCode}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "public",
+                "referrers",
+                "{{referralCode}}"
+              ]
+            },
+            "description": "Returns `{ code, firstName }`. 404 for invalid, paused or blocked codes.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Signup — VIP only (E1)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/public/signup",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "public",
+                "signup"
+              ]
+            },
+            "description": "SRS 6.1. Response `kind`: `vip`, `referrer`, `upgraded` or `already`. Max 5 signups per IP per hour (all signup requests count — if you get 429, wait or restart the API in development). `botToken` = Cloudflare Turnstile token (ignored when TURNSTILE_SECRET is empty).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"Maria\",\n  \"lastName\": \"Garcia\",\n  \"email\": \"maria.{{$timestamp}}@example.com\",\n  \"language\": \"es\",\n  \"joinReferral\": false,\n  \"consent\": true,\n  \"refCode\": \"{{referralCode}}\",\n  \"utmSource\": \"facebook\",\n  \"utmMedium\": \"paid\",\n  \"utmCampaign\": \"vip_launch\",\n  \"botToken\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));",
+                  "pm.test(\"kind is vip\", () => pm.expect(pm.response.json().data.kind).to.eql(\"vip\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Signup — validation errors (400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/public/signup",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "public",
+                "signup"
+              ]
+            },
+            "description": "Shows the server-side validation messages for every field.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"J\",\n  \"lastName\": \"\",\n  \"email\": \"not-an-email\",\n  \"language\": \"fr\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"400 with field errors\", () => { pm.response.to.have.status(400); pm.expect(pm.response.json().error.details).to.have.property(\"email\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Buy click (launch mode)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/public/buy-click",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "public",
+                "buy-click"
+              ]
+            },
+            "description": "Returns the Etsy link for the language and the code to show (referrer's code or the general VIP code). Counts the click.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"lang\": \"en\",\n  \"ref\": \"{{referralCode}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2. My Referrals (referrer self-check)",
+      "description": "SRS 6.7. Run **1. Public › Signup — join referral program** first (it saves `referrerEmail`). Request a magic link → Verify → the other requests use `referrerToken` automatically. In production, paste the `token=` value from the email link into the `magicToken` variable.",
+      "item": [
+        {
+          "name": "Request magic link (E5)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/public/my-referrals/request",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "public",
+                "my-referrals",
+                "request"
+              ]
+            },
+            "description": "Always 200 (no account enumeration). Max 5 per hour. In local development without BREVO_API_KEY the response also contains `devMagicToken`, saved to `magicToken` automatically; in production copy the token from the email link.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{referrerEmail}}\",\n  \"lang\": \"en\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));",
+                  "const j = pm.response.json(); if (j.success && j.data.devMagicToken) pm.collectionVariables.set(\"magicToken\", j.data.devMagicToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Verify magic link",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/public/my-referrals/verify",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "public",
+                "my-referrals",
+                "verify"
+              ]
+            },
+            "description": "Single use, 30 minutes. Returns a 24-hour referrer session token (saved to `referrerToken`).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"{{magicToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));",
+                  "const j = pm.response.json(); if (j.success && j.data.token) pm.collectionVariables.set(\"referrerToken\", j.data.token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "My results",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/public/my-referrals",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "public",
+                "my-referrals"
+              ]
+            },
+            "description": "Code, link, visits, signups, clicks, sales, commission earned / paid / unpaid.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{referrerToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Save PayPal email",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/public/my-referrals/payout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "public",
+                "my-referrals",
+                "payout"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"payoutEmail\": \"john.paypal@example.com\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{referrerToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Sign out",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/public/my-referrals/logout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "public",
+                "my-referrals",
+                "logout"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{referrerToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "auth": {
+        "type": "noauth"
+      }
+    },
+    {
+      "name": "4. Admin panel",
+      "description": "All requests use Bearer {{token}} (run Login first).",
+      "item": [
+        {
+          "name": "A2 Dashboard",
+          "description": "",
+          "item": [
+            {
+              "name": "Dashboard",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/dashboard",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "dashboard"
+                  ]
+                },
+                "description": "Cards, signups per day (30 days), EN vs ES, top 10 referrers, last 10 signups, site mode."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "A3 Site Mode & Book Links",
+          "description": "",
+          "item": [
+            {
+              "name": "Switch to Launch mode + links & prices",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/settings/site-mode",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "settings",
+                    "site-mode"
+                  ]
+                },
+                "description": "`autoVipPrice: true` calculates the VIP price from the discount %. `launchDate` (ISO) shows a countdown.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"siteMode\": \"launch\",\n  \"bookLinkEn\": \"https://www.etsy.com/listing/111/english\",\n  \"bookLinkEs\": \"https://www.etsy.com/listing/222/spanish\",\n  \"regularPrice\": 59.99,\n  \"autoVipPrice\": true,\n  \"generalVipCode\": \"GSTAVIP10\",\n  \"launchDate\": null\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Switch back to Pre-launch",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/settings/site-mode",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "settings",
+                    "site-mode"
+                  ]
+                },
+                "description": "",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"siteMode\": \"prelaunch\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "A4 Announcements",
+          "description": "",
+          "item": [
+            {
+              "name": "List",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/announcements",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "announcements"
+                  ]
+                },
+                "description": "Includes `effectiveStatus` (draft / published / scheduled / expired), `hasEn`, `hasEs`."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Create",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/announcements",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "announcements"
+                  ]
+                },
+                "description": "Rich text is sanitized. `status: published` with a future `startsAt` becomes `scheduled`.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"titleEn\": \"Final chapter in review\",\n  \"titleEs\": \"Último capítulo en revisión\",\n  \"bodyEn\": \"<p>The last chapter is in <b>final review</b>.</p>\",\n  \"bodyEs\": \"<p>El último capítulo está en <b>revisión final</b>.</p>\",\n  \"buttonTextEn\": \"Join the VIP list\",\n  \"buttonTextEs\": \"Unirme a la lista VIP\",\n  \"buttonUrl\": \"#join\",\n  \"pinned\": true,\n  \"status\": \"published\",\n  \"startsAt\": null,\n  \"endsAt\": null\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));",
+                      "const j = pm.response.json(); if (j.success && j.data._id) pm.collectionVariables.set(\"announcementId\", j.data._id);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Get one",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/announcements/{{announcementId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "announcements",
+                    "{{announcementId}}"
+                  ]
+                },
+                "description": ""
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Update",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/announcements/{{announcementId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "announcements",
+                    "{{announcementId}}"
+                  ]
+                },
+                "description": "",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"pinned\": false,\n  \"endsAt\": \"2026-12-31T23:59:00.000Z\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Reorder (drag & drop)",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/announcements/reorder",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "announcements",
+                    "reorder"
+                  ]
+                },
+                "description": "Send all ids in the new order.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"ids\": [\n    \"{{announcementId}}\"\n  ]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Upload image",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/announcements/upload-image",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "announcements",
+                    "upload-image"
+                  ]
+                },
+                "description": "Choose a WebP/JPG/PNG file in the `image` field. Returns a URL to put in `imageUrl`.",
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "image",
+                      "type": "file",
+                      "src": []
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Email this announcement (E3)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/announcements/{{announcementId}}/email",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "announcements",
+                    "{{announcementId}}",
+                    "email"
+                  ]
+                },
+                "description": "`audience`: all · en · es · referrers. Returns an email log (202); track progress in *A10 › Email log by id*.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"audience\": \"all\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));",
+                      "const j = pm.response.json(); if (j.success && j.data._id) pm.collectionVariables.set(\"emailLogId\", j.data._id);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Delete",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/announcements/{{announcementId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "announcements",
+                    "{{announcementId}}"
+                  ]
+                },
+                "description": ""
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "A5 VIP Members",
+          "description": "",
+          "item": [
+            {
+              "name": "List (search, filters, pagination)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/members?page=1&limit=50&sort=-createdAt",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "members"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "50"
+                    },
+                    {
+                      "key": "sort",
+                      "value": "-createdAt"
+                    },
+                    {
+                      "key": "q",
+                      "value": "",
+                      "disabled": true
+                    },
+                    {
+                      "key": "language",
+                      "value": "es",
+                      "disabled": true
+                    },
+                    {
+                      "key": "status",
+                      "value": "subscribed",
+                      "disabled": true
+                    },
+                    {
+                      "key": "referredBy",
+                      "value": "any",
+                      "disabled": true
+                    },
+                    {
+                      "key": "isReferrer",
+                      "value": "true",
+                      "disabled": true
+                    },
+                    {
+                      "key": "from",
+                      "value": "2026-10-01",
+                      "disabled": true
+                    },
+                    {
+                      "key": "to",
+                      "value": "2026-11-30",
+                      "disabled": true
+                    }
+                  ]
+                },
+                "description": "Enable the query params you need. `referredBy` = referrer id, `any` or `none`."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));",
+                      "const j = pm.response.json(); if (j.success && j.data[0] && j.data[0]._id) pm.collectionVariables.set(\"memberId\", j.data[0] && j.data[0]._id);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Export CSV",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/members?format=csv",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "members"
+                  ],
+                  "query": [
+                    {
+                      "key": "format",
+                      "value": "csv"
+                    }
+                  ]
+                },
+                "description": "Use *Send and Download*. `format=xlsx` for Excel."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Get member",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/members/{{memberId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "members",
+                    "{{memberId}}"
+                  ]
+                },
+                "description": ""
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));",
+                      "const j = pm.response.json();",
+                      "if (j.data && j.data.unsubscribeLink) pm.collectionVariables.set(\"unsubscribeToken\", j.data.unsubscribeLink.split(\"token=\")[1]);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Public: unsubscribe link (test)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/public/unsubscribe",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "public",
+                    "unsubscribe"
+                  ]
+                },
+                "description": "One-click unsubscribe. `unsubscribeToken` is filled by *Get member* above (from `unsubscribeLink`). This is the page the email footer links to.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"token\": \"{{unsubscribeToken}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Public: resubscribe (test)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/public/resubscribe",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "public",
+                    "resubscribe"
+                  ]
+                },
+                "description": "",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"token\": \"{{unsubscribeToken}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Update member",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/members/{{memberId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "members",
+                    "{{memberId}}"
+                  ]
+                },
+                "description": "",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"firstName\": \"Maria\",\n  \"lastName\": \"Garcia\",\n  \"language\": \"es\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Make referrer",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/members/{{memberId}}/make-referrer",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "members",
+                    "{{memberId}}",
+                    "make-referrer"
+                  ]
+                },
+                "description": "400 if the member is already a referrer."
+              }
+            },
+            {
+              "name": "Unsubscribe member",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/members/{{memberId}}/unsubscribe",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "members",
+                    "{{memberId}}",
+                    "unsubscribe"
+                  ]
+                },
+                "description": ""
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Bulk action",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/members/bulk",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "members",
+                    "bulk"
+                  ]
+                },
+                "description": "`action`: unsubscribe · delete · export (with `format`: csv/xlsx).",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"action\": \"unsubscribe\",\n  \"ids\": [\n    \"{{memberId}}\"\n  ]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Delete member (GDPR)",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/members/{{memberId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "members",
+                    "{{memberId}}"
+                  ]
+                },
+                "description": "Permanent. Their referral code is retired and never reused."
+              }
+            }
+          ]
+        },
+        {
+          "name": "A6 Referrers",
+          "description": "",
+          "item": [
+            {
+              "name": "List with stats",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/referrers?sort=-signups&page=1&limit=50",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "referrers"
+                  ],
+                  "query": [
+                    {
+                      "key": "sort",
+                      "value": "-signups"
+                    },
+                    {
+                      "key": "page",
+                      "value": "1"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "50"
+                    },
+                    {
+                      "key": "q",
+                      "value": "",
+                      "disabled": true
+                    },
+                    {
+                      "key": "status",
+                      "value": "active",
+                      "disabled": true
+                    },
+                    {
+                      "key": "etsyCreated",
+                      "value": "false",
+                      "disabled": true
+                    },
+                    {
+                      "key": "format",
+                      "value": "csv",
+                      "disabled": true
+                    }
+                  ]
+                },
+                "description": "Sort by any column: name, code, status, etsy, visits, signups, clicks, sales, earned, paid, unpaid, ready (prefix `-` for descending)."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));",
+                      "const j = pm.response.json(); if (j.success && j.data[0] && j.data[0].id) pm.collectionVariables.set(\"referrerId\", j.data[0] && j.data[0].id);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Detail (stats, referred, sales, payouts)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/referrers/{{referrerId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "referrers",
+                    "{{referrerId}}"
+                  ]
+                },
+                "description": ""
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Update notes / payout info",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/referrers/{{referrerId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "referrers",
+                    "{{referrerId}}"
+                  ]
+                },
+                "description": "",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"notes\": \"Very active on Facebook\",\n  \"payoutMethod\": \"PayPal\",\n  \"payoutEmail\": \"paypal@example.com\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Pause",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/referrers/{{referrerId}}/status",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "referrers",
+                    "{{referrerId}}",
+                    "status"
+                  ]
+                },
+                "description": "",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"status\": \"paused\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Activate",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/referrers/{{referrerId}}/status",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "referrers",
+                    "{{referrerId}}",
+                    "status"
+                  ]
+                },
+                "description": "",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"status\": \"active\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Edit code",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/referrers/{{referrerId}}/code",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "referrers",
+                    "{{referrerId}}",
+                    "code"
+                  ]
+                },
+                "description": "Must stay unique (409 if taken). Resets the Etsy flag.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"code\": \"GSTAJOHN99\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Resend referral email (E2)",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/referrers/{{referrerId}}/resend-email",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "referrers",
+                    "{{referrerId}}",
+                    "resend-email"
+                  ]
+                },
+                "description": ""
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "A7 Etsy Codes",
+          "description": "",
+          "item": [
+            {
+              "name": "Codes not created on Etsy",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/etsy-codes?created=false",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "etsy-codes"
+                  ],
+                  "query": [
+                    {
+                      "key": "created",
+                      "value": "false"
+                    }
+                  ]
+                },
+                "description": "Sorted by most signups first."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Mark as created on Etsy",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/etsy-codes/mark",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "etsy-codes",
+                    "mark"
+                  ]
+                },
+                "description": "",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"ids\": [\n    \"{{referrerId}}\"\n  ],\n  \"created\": true\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "A8 Sales Import",
+          "description": "Upload → (mapping) → confirm. Pick your Etsy Orders CSV in the `file` field of *Upload & preview*.",
+          "item": [
+            {
+              "name": "Upload & preview CSV",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/sales/import/preview",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "sales",
+                    "import",
+                    "preview"
+                  ]
+                },
+                "description": "Choose the CSV file (max 10 MB). Returns `draftId`, the suggested column mapping and a summary: rows found, known codes, unknown codes, duplicates, total commission.",
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "file",
+                      "type": "file",
+                      "src": []
+                    },
+                    {
+                      "key": "mapping",
+                      "value": "",
+                      "type": "text",
+                      "disabled": true,
+                      "description": "Optional JSON, e.g. {\"orderId\":\"Order ID\"}"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const j = pm.response.json(); if (j.success && j.data.draftId) pm.collectionVariables.set(\"draftId\", j.data.draftId);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Re-analyze with column mapping",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/sales/import/{{draftId}}/analyze",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "sales",
+                    "import",
+                    "{{draftId}}",
+                    "analyze"
+                  ]
+                },
+                "description": "",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"mapping\": {\n    \"orderId\": \"Order ID\",\n    \"saleDate\": \"Sale Date\",\n    \"couponCode\": \"Coupon Code\",\n    \"quantity\": \"Number of Items\",\n    \"orderValue\": \"Order Value\",\n    \"discount\": \"Discount Amount\",\n    \"buyerName\": \"Full Name\"\n  }\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Confirm import",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/sales/import/{{draftId}}/confirm",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "sales",
+                    "import",
+                    "{{draftId}}",
+                    "confirm"
+                  ]
+                },
+                "description": "`assignments` for unknown codes: a referrer id, `\"skip\"`, or `null` (save without referrer).",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"assignments\": {\n    \"UNKNOWNCODE1\": \"skip\",\n    \"UNKNOWNCODE2\": null\n  }\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Import history",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/sales/imports",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "sales",
+                    "imports"
+                  ]
+                },
+                "description": ""
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Undo last import",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/sales/imports/undo-last",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "sales",
+                    "imports",
+                    "undo-last"
+                  ]
+                },
+                "description": ""
+              }
+            },
+            {
+              "name": "Add sale manually",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/sales/manual",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "sales",
+                    "manual"
+                  ]
+                },
+                "description": "`amount` = what the buyer paid (after discount).",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"saleDate\": \"2026-11-02\",\n  \"orderId\": \"MANUAL-{{$timestamp}}\",\n  \"code\": \"{{referralCode}}\",\n  \"amount\": 53.99,\n  \"quantity\": 1,\n  \"platform\": \"manual\",\n  \"note\": \"Sold in person\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "List sales",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/sales?page=1&limit=50",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "sales"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "50"
+                    },
+                    {
+                      "key": "status",
+                      "value": "pending",
+                      "disabled": true
+                    },
+                    {
+                      "key": "referrerId",
+                      "value": "{{referrerId}}",
+                      "disabled": true
+                    },
+                    {
+                      "key": "from",
+                      "value": "2026-10-01",
+                      "disabled": true
+                    },
+                    {
+                      "key": "to",
+                      "value": "2026-11-30",
+                      "disabled": true
+                    },
+                    {
+                      "key": "format",
+                      "value": "csv",
+                      "disabled": true
+                    }
+                  ]
+                },
+                "description": ""
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));",
+                      "const j = pm.response.json(); if (j.success && j.data[0] && j.data[0]._id) pm.collectionVariables.set(\"saleId\", j.data[0] && j.data[0]._id);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Mark sale refunded",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/sales/{{saleId}}/refund",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "sales",
+                    "{{saleId}}",
+                    "refund"
+                  ]
+                },
+                "description": "Commission → Cancelled. If already paid it becomes a negative balance for the next payout."
+              }
+            },
+            {
+              "name": "Run commission approval now",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/sales/approve-due",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "sales",
+                    "approve-due"
+                  ]
+                },
+                "description": "Pending → Approved after the holding period (also runs daily)."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "A9 Commissions & Payouts",
+          "description": "",
+          "item": [
+            {
+              "name": "Summary per referrer",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/payouts/summary?readyOnly=false&sort=-ready",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "payouts",
+                    "summary"
+                  ],
+                  "query": [
+                    {
+                      "key": "readyOnly",
+                      "value": "false"
+                    },
+                    {
+                      "key": "sort",
+                      "value": "-ready"
+                    }
+                  ]
+                },
+                "description": "Sales count, sales total, commission, paid, unpaid, ready to pay. `meta.totals` has pending / approved / paid."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Record payout",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/payouts",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "payouts"
+                  ]
+                },
+                "description": "Approved commissions (oldest first) up to the amount become Paid. Method: PayPal · Zelle · Cash App · Bank · Other.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"referrerId\": \"{{referrerId}}\",\n  \"amount\": 20.0,\n  \"paidOn\": \"2026-11-02\",\n  \"method\": \"PayPal\",\n  \"transactionId\": \"PP-123456\",\n  \"note\": \"November payout\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Payout history",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/payouts?format=json",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "payouts"
+                  ],
+                  "query": [
+                    {
+                      "key": "format",
+                      "value": "json"
+                    }
+                  ]
+                },
+                "description": ""
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "PayPal bulk payout CSV",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/payouts/paypal-export",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "payouts",
+                    "paypal-export"
+                  ]
+                },
+                "description": "Use *Send and Download*."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "A10 Emails",
+          "description": "",
+          "item": [
+            {
+              "name": "Templates E1–E6",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/emails/templates",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "emails",
+                    "templates"
+                  ]
+                },
+                "description": ""
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Get template",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/emails/templates/E1",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "emails",
+                    "templates",
+                    "E1"
+                  ]
+                },
+                "description": ""
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Update template",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/emails/templates/E1",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "emails",
+                    "templates",
+                    "E1"
+                  ]
+                },
+                "description": "Placeholders: {first_name} {code} {referral_link} {book_link} {price} {vip_price} {commission_percent} {unsubscribe_link}. `[Button text]` on its own line = red button.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"subjectEn\": \"Welcome to the GRYSOSTA VIP Priority List, {first_name}!\",\n  \"subjectEs\": \"¡Bienvenido a la Lista VIP Prioritaria de GRYSOSTA, {first_name}!\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Preview template",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/emails/templates/E4/preview?lang=es",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "emails",
+                    "templates",
+                    "E4",
+                    "preview"
+                  ],
+                  "query": [
+                    {
+                      "key": "lang",
+                      "value": "es"
+                    }
+                  ]
+                },
+                "description": ""
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Send test email",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/emails/templates/E2/test",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "emails",
+                    "templates",
+                    "E2",
+                    "test"
+                  ]
+                },
+                "description": "Sends to the logged-in admin (or `to`).",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"lang\": \"en\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Audience sizes",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/emails/audiences",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "emails",
+                    "audiences"
+                  ]
+                },
+                "description": ""
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Send launch email (E4)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/emails/launch",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "emails",
+                    "launch"
+                  ]
+                },
+                "description": "Batches within the Brevo daily limit.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"audience\": \"all\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));",
+                      "const j = pm.response.json(); if (j.success && j.data._id) pm.collectionVariables.set(\"emailLogId\", j.data._id);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Email log",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/emails/logs",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "emails",
+                    "logs"
+                  ]
+                },
+                "description": ""
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Email log by id (progress)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/emails/logs/{{emailLogId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "emails",
+                    "logs",
+                    "{{emailLogId}}"
+                  ]
+                },
+                "description": ""
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Unsubscribed list",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/emails/unsubscribed?format=json",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "emails",
+                    "unsubscribed"
+                  ],
+                  "query": [
+                    {
+                      "key": "format",
+                      "value": "json"
+                    }
+                  ]
+                },
+                "description": ""
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "A11 Site Content",
+          "description": "",
+          "item": [
+            {
+              "name": "Get content",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/content",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "content"
+                  ]
+                },
+                "description": ""
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Update texts",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/content/texts",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "content",
+                    "texts"
+                  ]
+                },
+                "description": "Keys: heroHeadline, heroSub, heroText, priceNote, referralText, footerTagline, disclaimer.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"texts\": {\n    \"heroHeadline\": {\n      \"en\": \"LEARN. TRADE. GROW.\",\n      \"es\": \"APRENDE. INVIERTE. CRECE.\"\n    },\n    \"heroSub\": {\n      \"en\": \"Your financial knowledge!\",\n      \"es\": \"¡Su conocimiento financiero!\"\n    }\n  }\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Replace FAQ (add / edit / delete / reorder)",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/content/faq",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "content",
+                    "faq"
+                  ]
+                },
+                "description": "",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"faq\": [\n    {\n      \"qEn\": \"When will the manual be available?\",\n      \"qEs\": \"¿Cuándo estará disponible el manual?\",\n      \"aEn\": \"We are finishing it now. VIP members are told first by email.\",\n      \"aEs\": \"Lo estamos terminando. Los miembros VIP serán los primeros en saberlo por correo.\"\n    },\n    {\n      \"qEn\": \"Do I pay anything today?\",\n      \"qEs\": \"¿Pago algo hoy?\",\n      \"aEn\": \"No. Joining the VIP list is free.\",\n      \"aEs\": \"No. Unirse a la lista VIP es gratis.\"\n    }\n  ]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Update policy pages",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/content/pages",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "content",
+                    "pages"
+                  ]
+                },
+                "description": "",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"pages\": {\n    \"privacy\": {\n      \"en\": \"<h2>Privacy Policy</h2><p>…</p>\",\n      \"es\": \"<h2>Política de Privacidad</h2><p>…</p>\"\n    }\n  }\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Upload image (hero/cover/retirement/og)",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/content/images/hero",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "content",
+                    "images",
+                    "hero"
+                  ]
+                },
+                "description": "Change `hero` in the URL to cover, retirement or og.",
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "image",
+                      "type": "file",
+                      "src": []
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Remove image",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/content/images/hero",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "content",
+                    "images",
+                    "hero"
+                  ]
+                },
+                "description": ""
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "A12 Settings",
+          "description": "",
+          "item": [
+            {
+              "name": "Get settings",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/settings",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "settings"
+                  ]
+                },
+                "description": ""
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Update settings",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/settings",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "settings"
+                  ]
+                },
+                "description": "Commission % changes apply only to sales imported afterwards. Site mode is changed in A3.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"commissionPercent\": 10,\n  \"discountPercent\": 10,\n  \"commissionBase\": \"after_discount\",\n  \"etsyFeePercent\": 9.5,\n  \"minPayout\": 20,\n  \"holdingDays\": 30,\n  \"cookieDays\": 60,\n  \"contactEmail\": \"info@grysosta.com\",\n  \"mailingAddress\": \"P.O. Box 0000 · Houston, TX 77001 · USA\",\n  \"social\": {\n    \"facebook\": \"https://facebook.com/grysosta\",\n    \"instagram\": \"https://instagram.com/grysosta\"\n  },\n  \"gaId\": \"G-XXXXXXXXXX\",\n  \"dailySummary\": true\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "A13 Reports & Export",
+          "description": "",
+          "item": [
+            {
+              "name": "Export dataset",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/reports/export/members?format=xlsx",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "reports",
+                    "export",
+                    "members"
+                  ],
+                  "query": [
+                    {
+                      "key": "format",
+                      "value": "xlsx"
+                    },
+                    {
+                      "key": "lang",
+                      "value": "es",
+                      "disabled": true
+                    },
+                    {
+                      "key": "from",
+                      "value": "2026-10-01",
+                      "disabled": true
+                    },
+                    {
+                      "key": "to",
+                      "value": "2026-11-30",
+                      "disabled": true
+                    }
+                  ]
+                },
+                "description": "Datasets: members · referrers · sales · commissions · payouts · activity. Use *Send and Download*."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Signups by source (UTM)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/reports/signups-by-source?",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "reports",
+                    "signups-by-source"
+                  ],
+                  "query": [
+                    {
+                      "key": "lang",
+                      "value": "en",
+                      "disabled": true
+                    }
+                  ]
+                },
+                "description": ""
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Activity log",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/activity?page=1",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "activity"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1"
+                    },
+                    {
+                      "key": "q",
+                      "value": "",
+                      "disabled": true
+                    },
+                    {
+                      "key": "entity",
+                      "value": "members",
+                      "disabled": true
+                    }
+                  ]
+                },
+                "description": ""
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Status is 2xx\", () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
