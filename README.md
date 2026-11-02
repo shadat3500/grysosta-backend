@@ -6,7 +6,7 @@ REST API for the GRYSOSTA VIP landing page, referral system and admin panel (SRS
 ## Quick start
 
 ```bash
-cd backend
+
 cp .env.example .env          # set MONGODB_URI, HASH_SALT, ADMIN_PASSWORD …
 npm install
 npm run seed:demo             # defaults + first admin + sample data (use `npm run seed` for no demo data)
@@ -139,4 +139,4 @@ Referrer self-check routes use the token from `/public/my-referrals/verify` (or 
 
 ## Connecting the frontend
 
-The Next.js app in the repo root currently uses a browser-side demo store (`src/lib/store.ts`). To go live, replace those store actions with calls to the endpoints above. Set `CORS_ORIGINS` and `SITE_URL` to the frontend URL. When the API is on another domain, set `COOKIE_SECURE=true`.
+The Next.js frontend ([grysosta-frontend](https://github.com/shadat3500/grysosta-frontend)) currently uses a browser-side demo store (`src/lib/store.ts`). To go live, replace those store actions with calls to the endpoints above. Set `CORS_ORIGINS` and `SITE_URL` to the frontend URL. When the API is on another domain, set `COOKIE_SECURE=true`.
