@@ -6,7 +6,6 @@ REST API for the GRYSOSTA VIP landing page, referral system and admin panel (SRS
 ## Quick start
 
 ```bash
-
 cp .env.example .env          # set MONGODB_URI, HASH_SALT, ADMIN_PASSWORD …
 npm install
 npm run seed:demo             # defaults + first admin + sample data (use `npm run seed` for no demo data)
