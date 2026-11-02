@@ -1,0 +1,5 @@
+Sale Date,Order ID,Full Name,Number of Items,Coupon Code,Order Value,Discount Amount,Order Total,Order Net
+11/02/26,3500000001,Test Buyer,1,GSTAVIP10,59.99,6.00,53.99,48.86
+11/02/26,3500000002,Test Buyer,1,GSTAVIP10,59.99,6.00,53.99,48.86
+11/02/26,3500000003,Test Buyer,1,,59.99,0.00,59.99,54.29
+11/02/26,3500000004,Test Buyer,1,FRIEND2026,59.99,6.00,53.99,48.86
