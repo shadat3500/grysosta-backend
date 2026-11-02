@@ -1,5 +1,5 @@
 node_modules
 dist
-.env
 uploads/*
 !uploads/.gitkeep
+config.bat
