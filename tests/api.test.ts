@@ -8,8 +8,15 @@ import { emailService } from "../src/modules/emails/email.service";
 import { sentMail } from "../src/modules/emails/email.provider";
 import { Sale } from "../src/modules/sales/sales.models";
 import { Session } from "../src/modules/auth/session.model";
+import { totp } from "../src/modules/auth/auth.service";
+import { UPLOAD_DIR } from "../src/common/upload";
+import fs from "node:fs";
+import path from "node:path";
+import http from "node:http";
+import type { AddressInfo } from "node:net";
 
 const app = createApp();
+const TINY_PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64");
 const API = "/api/v1";
 let token = "";
 const auth = () => ({ Authorization: `Bearer ${token}` });
@@ -308,6 +315,218 @@ describe("Sales import & commissions (SRS 14.5)", () => {
   });
 });
 
+describe("Full endpoint coverage", () => {
+  let announcementId = "";
+  let memberId = "";
+
+  it("A1 forgot → reset → change password (sessions signed out)", async () => {
+    sentMail.length = 0;
+    const unknown = await request(app).post(`${API}/auth/forgot-password`).send({ email: "nobody@example.com" });
+    expect(unknown.status).toBe(200);
+    await emailService.drain();
+    expect(sentMail.some((m) => m.to === "nobody@example.com")).toBe(false);
+    await request(app).post(`${API}/auth/forgot-password`).send({ email: "admin@grysosta.com" });
+    await emailService.drain();
+    const mail = sentMail.find((m) => m.to === "admin@grysosta.com");
+    expect(mail).toBeDefined();
+    const resetToken = mail!.text.match(/token=(\S+)/)![1];
+    expect((await request(app).post(`${API}/auth/reset-password`).send({ token: "x".repeat(20), password: "NewPass123!" })).status).toBe(400);
+    expect((await request(app).post(`${API}/auth/reset-password`).send({ token: resetToken, password: "NewPass123!" })).status).toBe(200);
+    expect((await request(app).post(`${API}/auth/reset-password`).send({ token: resetToken, password: "Another123!" })).status).toBe(400); // single use
+    expect((await request(app).post(`${API}/auth/login`).send({ email: "admin@grysosta.com", password: "grysosta2026" })).status).toBe(401);
+    token = (await request(app).post(`${API}/auth/login`).send({ email: "admin@grysosta.com", password: "NewPass123!" })).body.data.token;
+    expect((await request(app).post(`${API}/auth/change-password`).set(auth()).send({ currentPassword: "nope", newPassword: "Third123!" })).status).toBe(400);
+    expect((await request(app).post(`${API}/auth/change-password`).set(auth()).send({ currentPassword: "NewPass123!", newPassword: "grysosta2026" })).status).toBe(200);
+    token = (await request(app).post(`${API}/auth/login`).send({ email: "admin@grysosta.com", password: "grysosta2026" })).body.data.token;
+    expect((await request(app).get(`${API}/auth/me`).set(auth())).body.data.email).toBe("admin@grysosta.com");
+  });
+
+  it("A1 2-step login: enable → challenge → verify → disable", async () => {
+    const setup = await request(app).post(`${API}/auth/2fa/setup`).set(auth());
+    expect(setup.status).toBe(200);
+    const { secret, otpauthUrl } = setup.body.data;
+    expect(otpauthUrl).toContain("otpauth://totp/");
+    expect((await request(app).post(`${API}/auth/2fa/enable`).set(auth()).send({ code: "000000" })).status).toBe(400);
+    expect((await request(app).post(`${API}/auth/2fa/enable`).set(auth()).send({ code: totp(secret).generate() })).status).toBe(200);
+    const challenge = await request(app).post(`${API}/auth/login`).send({ email: "admin@grysosta.com", password: "grysosta2026" });
+    expect(challenge.body.data.twoFactorRequired).toBe(true);
+    expect((await request(app).post(`${API}/auth/2fa/verify`).send({ challengeToken: challenge.body.data.challengeToken, code: "000000" })).status).toBe(401);
+    const v = await request(app).post(`${API}/auth/2fa/verify`).send({ challengeToken: challenge.body.data.challengeToken, code: totp(secret).generate() });
+    expect(v.status).toBe(200);
+    token = v.body.data.token;
+    expect((await request(app).post(`${API}/auth/2fa/disable`).set(auth()).send({ code: totp(secret).generate() })).status).toBe(200);
+    const plain = await request(app).post(`${API}/auth/login`).send({ email: "admin@grysosta.com", password: "grysosta2026" });
+    expect(plain.body.data.twoFactorRequired).toBe(false);
+    token = plain.body.data.token;
+  });
+
+  it("A1 logout ends the session", async () => {
+    expect((await request(app).post(`${API}/auth/logout`).set(auth())).status).toBe(200);
+    expect((await request(app).get(`${API}/auth/me`).set(auth())).status).toBe(401);
+    token = (await request(app).post(`${API}/auth/login`).send({ email: "admin@grysosta.com", password: "grysosta2026" })).body.data.token;
+  });
+
+  it("A4 announcements: list, get, partial edit keeps other fields, image upload, delete", async () => {
+    const c = await request(app).post(`${API}/admin/announcements`).set(auth()).send({ titleEn: "Edit me", titleEs: "Editame", bodyEn: "<p>Body EN</p>", bodyEs: "<p>Body ES</p>", buttonTextEn: "Go", buttonUrl: "https://example.com", status: "published" });
+    announcementId = c.body.data._id;
+    const list = await request(app).get(`${API}/admin/announcements`).set(auth());
+    expect(list.body.data.some((a: { _id: string }) => a._id === announcementId)).toBe(true);
+    expect((await request(app).get(`${API}/admin/announcements/${announcementId}`).set(auth())).body.data.effectiveStatus).toBeDefined();
+    const edit = await request(app).patch(`${API}/admin/announcements/${announcementId}`).set(auth()).send({ pinned: true });
+    expect(edit.body.data.pinned).toBe(true);
+    expect(edit.body.data.titleEn).toBe("Edit me");          // a partial edit must not wipe untouched fields
+    expect(edit.body.data.bodyEn).toBe("<p>Body EN</p>");
+    expect(edit.body.data.buttonUrl).toBe("https://example.com");
+    expect((await request(app).patch(`${API}/admin/announcements/${announcementId}`).set(auth()).send({ titleEn: "" })).status).toBe(400);
+    const img = await request(app).post(`${API}/admin/announcements/upload-image`).set(auth()).attach("image", TINY_PNG, { filename: "a.png", contentType: "image/png" });
+    expect(img.status).toBe(200);
+    expect(img.body.data.url).toContain("/uploads/");
+    fs.unlinkSync(path.join(UPLOAD_DIR, path.basename(img.body.data.url)));
+    expect((await request(app).post(`${API}/admin/announcements/upload-image`).set(auth())).status).toBe(400);
+    expect((await request(app).post(`${API}/admin/announcements/upload-image`).set(auth()).attach("image", Buffer.from("hi"), { filename: "a.txt", contentType: "text/plain" })).status).toBe(400);
+    expect((await request(app).delete(`${API}/admin/announcements/${announcementId}`).set(auth())).body.data.deleted).toBe(true);
+    expect((await request(app).get(`${API}/admin/announcements/${announcementId}`).set(auth())).status).toBe(404);
+  });
+
+  it("A11 content: pages, cover upload and removal, unknown slot rejected", async () => {
+    expect((await request(app).put(`${API}/admin/content/pages`).set(auth()).send({ pages: { privacy: { en: "<p>Privacy EN</p>", es: "<p>Privacidad</p>" } } })).status).toBe(200);
+    const site = await request(app).get(`${API}/public/site`);
+    expect(site.body.data.content.pages.privacy.en).toBe("<p>Privacy EN</p>");
+    const up = await request(app).post(`${API}/admin/content/images/cover`).set(auth()).attach("image", TINY_PNG, { filename: "cover.png", contentType: "image/png" });
+    expect(up.status).toBe(200);
+    expect(up.body.data.images.cover).toContain("/uploads/");
+    expect((await request(app).delete(`${API}/admin/content/images/cover`).set(auth())).body.data.images.cover).toBe("");
+    expect((await request(app).post(`${API}/admin/content/images/nope`).set(auth()).attach("image", TINY_PNG, { filename: "x.png", contentType: "image/png" })).status).toBe(400);
+    expect((await request(app).get(`${API}/admin/content`).set(auth())).body.data.texts).toBeDefined();
+  });
+
+  it("A5 members: view one, export selected, bulk unsubscribe, single unsubscribe", async () => {
+    await signup({ firstName: "Lucia", lastName: "Gomez", email: "lucia@example.com", language: "es" });
+    memberId = (await request(app).get(`${API}/admin/members?q=lucia@example.com`).set(auth())).body.data[0]._id;
+    const one = await request(app).get(`${API}/admin/members/${memberId}`).set(auth());
+    expect(one.body.data.email).toBe("lucia@example.com");
+    expect(one.body.data.unsubscribeLink).toContain("/es/unsubscribe?token=");
+    expect((await request(app).get(`${API}/admin/members/000000000000000000000000`).set(auth())).status).toBe(404);
+    const csv = await request(app).post(`${API}/admin/members/bulk`).set(auth()).send({ action: "export", ids: [memberId], format: "csv" });
+    expect(csv.headers["content-type"]).toContain("text/csv");
+    expect(csv.text).toContain("lucia@example.com");
+    expect((await request(app).post(`${API}/admin/members/bulk`).set(auth()).send({ action: "unsubscribe", ids: [memberId] })).body.data.affected).toBe(1);
+    expect((await request(app).post(`${API}/admin/members/${memberId}/unsubscribe`).set(auth())).status).toBe(200);
+    expect((await request(app).post(`${API}/admin/members/bulk`).set(auth()).send({ action: "nope", ids: [memberId] })).status).toBe(400);
+  });
+
+  it("A6 referrers: notes, resend welcome email, CSV/XLSX export, invalid status rejected", async () => {
+    const ana = (await request(app).get(`${API}/admin/referrers?q=ana.lopez`).set(auth())).body.data[0];
+    const note = await request(app).patch(`${API}/admin/referrers/${ana.id}`).set(auth()).send({ notes: "Call her Monday", payoutMethod: "PayPal", payoutEmail: "ana@example.com" });
+    expect(note.body.data.notes).toBe("Call her Monday");
+    expect((await request(app).post(`${API}/admin/referrers/${ana.id}/resend-email`).set(auth())).body.data.queued).toBe(true);
+    expect((await request(app).get(`${API}/admin/referrers?format=csv`).set(auth())).headers["content-type"]).toContain("text/csv");
+    expect((await request(app).get(`${API}/admin/referrers?format=xlsx`).set(auth())).headers["content-type"]).toContain("spreadsheetml");
+    expect((await request(app).patch(`${API}/admin/referrers/${ana.id}/status`).set(auth()).send({ status: "frozen" })).status).toBe(400);
+    expect((await request(app).get(`${API}/admin/referrers/000000000000000000000000`).set(auth())).status).toBe(404);
+  });
+
+  it("A8 sales: filtered list and CSV export", async () => {
+    expect((await request(app).get(`${API}/admin/sales?status=pending`).set(auth())).status).toBe(200);
+    const csv = await request(app).get(`${API}/admin/sales?format=csv`).set(auth());
+    expect(csv.headers["content-type"]).toContain("text/csv");
+  });
+
+  it("A9 payouts: list, CSV, PayPal bulk export", async () => {
+    const l = await request(app).get(`${API}/admin/payouts`).set(auth());
+    expect(Array.isArray(l.body.data)).toBe(true);
+    expect((await request(app).get(`${API}/admin/payouts?format=csv`).set(auth())).headers["content-type"]).toContain("text/csv");
+    const pp = await request(app).get(`${API}/admin/payouts/paypal-export`).set(auth());
+    expect(pp.text.split("\n")[0]).toContain("Recipient email");
+  });
+
+  it("A10 emails: one template with placeholders, preview, audiences, logs, unsubscribed export", async () => {
+    const one = await request(app).get(`${API}/admin/emails/templates/E4`).set(auth());
+    expect(one.body.data.key).toBe("E4");
+    expect(one.body.meta.placeholders).toContain("{code}");
+    expect((await request(app).get(`${API}/admin/emails/templates/E1/preview?lang=es`).set(auth())).status).toBe(200);
+    expect((await request(app).get(`${API}/admin/emails/audiences`).set(auth())).body.data.all).toBeGreaterThan(0);
+    const logs = await request(app).get(`${API}/admin/emails/logs`).set(auth());
+    expect(logs.body.data.length).toBeGreaterThan(0);
+    const one2 = await request(app).get(`${API}/admin/emails/logs/${logs.body.data[0]._id}`).set(auth());
+    expect(one2.body.data.progress).toBeGreaterThanOrEqual(0);
+    expect((await request(app).get(`${API}/admin/emails/unsubscribed`).set(auth())).status).toBe(200);
+    expect((await request(app).get(`${API}/admin/emails/unsubscribed?format=csv`).set(auth())).headers["content-type"]).toContain("text/csv");
+  });
+
+  it("A12 settings: read, update, social links, site mode switch", async () => {
+    const g = await request(app).get(`${API}/admin/settings`).set(auth());
+    const originalMin = g.body.data.minPayout;
+    const p = await request(app).patch(`${API}/admin/settings`).set(auth()).send({ minPayout: 25, social: { instagram: "https://instagram.com/grysosta" } });
+    expect(p.body.data.minPayout).toBe(25);
+    expect(p.body.data.social.instagram).toBe("https://instagram.com/grysosta");
+    await request(app).patch(`${API}/admin/settings`).set(auth()).send({ minPayout: originalMin });
+    expect((await request(app).patch(`${API}/admin/settings/site-mode`).set(auth()).send({ siteMode: "prelaunch" })).status).toBe(200);
+    expect((await request(app).get(`${API}/public/site`)).body.data.settings.bookLinkEn).toBeNull();
+    expect((await request(app).patch(`${API}/admin/settings/site-mode`).set(auth()).send({ siteMode: "launch" })).status).toBe(200);
+  });
+
+  it("/my-referrals: unknown email gets a generic reply; magic link → verify → payout email → logout", async () => {
+    const generic = await request(app).post(`${API}/public/my-referrals/request`).send({ email: "nobody@example.com" });
+    expect(generic.status).toBe(200);
+    const john = (await request(app).get(`${API}/admin/referrers?q=john@example.com`).set(auth())).body.data[0];
+    const req1 = await request(app).post(`${API}/public/my-referrals/request`).send({ email: "john@example.com", lang: "en" });
+    sentMail.length = 0;
+    await emailService.drain();
+    const mt = sentMail.find((m) => m.to === "john@example.com")!.text.match(/token=([\w-]+)/)![1];
+    expect(req1.status).toBe(200);
+    const v = await request(app).post(`${API}/public/my-referrals/verify`).send({ token: mt });
+    expect(v.status).toBe(200);
+    const bearer = { Authorization: `Bearer ${v.body.data.token}` };
+    expect((await request(app).get(`${API}/public/my-referrals`).set(bearer)).body.data.code).toBe(john.code);
+    expect((await request(app).post(`${API}/public/my-referrals/verify`).send({ token: mt })).status).toBe(400);
+    expect((await request(app).patch(`${API}/public/my-referrals/payout`).set(bearer).send({ payoutEmail: "nope" })).status).toBe(400);
+    expect((await request(app).patch(`${API}/public/my-referrals/payout`).set(bearer).send({ payoutEmail: "john.paypal@example.com" })).body.data.payoutEmail).toBe("john.paypal@example.com");
+    expect((await request(app).post(`${API}/public/my-referrals/logout`).set(bearer)).status).toBe(200);
+    expect((await request(app).get(`${API}/public/my-referrals`).set(bearer)).status).toBe(401);
+  });
+});
+
+describe("Live updates (SSE) for the admin panel", () => {
+  it("streams signups, visits and admin changes to an open admin session", async () => {
+    const server = app.listen(0);
+    const port = (server.address() as AddressInfo).port;
+    let status = 0;
+    let body = "";
+    const stream = http.get({ host: "127.0.0.1", port, path: `${API}/admin/events`, headers: { Cookie: `gsta_admin=${token}` } }, (res) => {
+      status = res.statusCode ?? 0;
+      res.setEncoding("utf8");
+      res.on("data", (c: string) => { body += c; });
+    });
+    const waitFor = async (check: () => boolean) => {
+      for (let i = 0; i < 100 && !check(); i++) await new Promise((r) => setTimeout(r, 30));
+      expect(check()).toBe(true);
+    };
+    await waitFor(() => body.includes(": connected"));
+    expect(status).toBe(200);
+
+    await signup({ firstName: "Live", lastName: "Viewer", email: "live@example.com", language: "en" });
+    await request(app).post(`${API}/public/visits`).send({ lang: "en" });
+    await request(app).patch(`${API}/admin/settings`).set(auth()).send({ minPayout: 20 });
+
+    await waitFor(() => body.includes("event: signup") && body.includes("event: visit") && body.includes("event: activity"));
+    expect(body).toContain('"kind":"vip"');
+    expect(body).toContain('"action":"Updated settings"');
+    stream.destroy();
+    await new Promise((r) => server.close(r));
+  });
+
+  it("rejects the stream without an admin session", async () => {
+    const server = app.listen(0);
+    const port = (server.address() as AddressInfo).port;
+    const status = await new Promise<number>((resolve) => {
+      const s = http.get({ host: "127.0.0.1", port, path: `${API}/admin/events` }, (res) => { resolve(res.statusCode ?? 0); res.resume(); });
+    });
+    expect(status).toBe(401);
+    await new Promise((r) => server.close(r));
+  });
+});
+
 describe("Admin modules", () => {
   it("A2 dashboard", async () => {
     const r = await request(app).get(`${API}/admin/dashboard`).set(auth());
@@ -408,7 +627,7 @@ describe("Admin modules", () => {
     }
     const s = await request(app).get(`${API}/admin/reports/signups-by-source`).set(auth());
     expect(s.body.data.find((x: { source: string }) => x.source === "referral")?.signups).toBeGreaterThan(0);
-    const a = await request(app).get(`${API}/admin/activity?q=payout`).set(auth());
+    const a = await request(app).get(`${API}/admin/activity?q=Recorded%20payout`).set(auth());
     expect(a.body.data[0].action).toBe("Recorded payout");
     expect(a.body.data[0].adminName).toBe("Georgino Perez");
   });

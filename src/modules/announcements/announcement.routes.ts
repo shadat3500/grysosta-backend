@@ -11,20 +11,22 @@ import { emailService, type Audience } from "../emails/email.service";
 import { sanitizeHtml } from "../../common/utils/sanitize";
 
 const dt = z.union([z.string().datetime({ offset: true }), z.string().regex(/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$/), z.null()]).optional();
+/* No .default() here: a partial edit must only change the fields it sends. Defaults are applied on create. */
 const base = z.object({
   titleEn: z.string().trim().min(1).max(200),
-  titleEs: z.string().trim().max(200).default(""),
-  bodyEn: z.string().max(20000).default(""),
-  bodyEs: z.string().max(20000).default(""),
-  imageUrl: z.string().max(1000).default(""),
-  buttonTextEn: z.string().max(80).default(""),
-  buttonTextEs: z.string().max(80).default(""),
-  buttonUrl: z.string().max(1000).default(""),
-  pinned: z.boolean().default(false),
-  status: z.enum(["draft", "published", "scheduled"]).default("draft"),
+  titleEs: z.string().trim().max(200),
+  bodyEn: z.string().max(20000),
+  bodyEs: z.string().max(20000),
+  imageUrl: z.string().max(1000),
+  buttonTextEn: z.string().max(80),
+  buttonTextEs: z.string().max(80),
+  buttonUrl: z.string().max(1000),
+  pinned: z.boolean(),
+  status: z.enum(["draft", "published", "scheduled"]),
   startsAt: dt,
   endsAt: dt,
 });
+const CREATE_DEFAULTS = { titleEs: "", bodyEn: "", bodyEs: "", imageUrl: "", buttonTextEn: "", buttonTextEs: "", buttonUrl: "", pinned: false, status: "draft" as const, startsAt: null, endsAt: null };
 
 function normalize(b: Record<string, unknown>) {
   const out: Record<string, unknown> = { ...b };
@@ -49,9 +51,9 @@ announcementRouter.get("/:id", validate(idParams, "params"), async (req, res) =>
   ok(res, { ...a, effectiveStatus: effectiveStatus(a) });
 });
 
-announcementRouter.post("/", validate(base), async (req, res) => {
+announcementRouter.post("/", validate(base.partial().required({ titleEn: true })), async (req, res) => {
   const last = await Announcement.findOne().sort({ sortOrder: -1 }).lean();
-  const a = await Announcement.create({ ...normalize(req.body), sortOrder: (last?.sortOrder ?? -1) + 1 });
+  const a = await Announcement.create({ ...CREATE_DEFAULTS, ...normalize(req.body), sortOrder: (last?.sortOrder ?? -1) + 1 });
   await audit(req, "Created announcement", "announcements", String(a._id), a.titleEn);
   created(res, a);
 });

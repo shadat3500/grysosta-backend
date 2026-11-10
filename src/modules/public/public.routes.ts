@@ -21,6 +21,7 @@ import { createSession } from "../auth/auth.service";
 import { Session } from "../auth/session.model";
 import { REFERRER_COOKIE, requireReferrer } from "../auth/auth.middleware";
 import { sha256 } from "../../common/utils/crypto";
+import { publish } from "../../common/realtime";
 
 export const publicRouter = Router();
 const REF_COOKIE = "gsta_ref";
@@ -65,6 +66,7 @@ publicRouter.post("/visits", trackingLimiter, validate(visitSchema), async (req,
     if (r) { await trackingService.referralVisit(r._id, hash, req.body.lang); await setRefCookie(res, r.code); ref = r; }
   }
   if (!ref) ref = await referrerService.findActiveByCode(req.cookies?.[REF_COOKIE]);
+  publish("visit", { lang: req.body.lang, referrerCode: ref?.code ?? null });
   const owner = ref?.memberId ? await Member.findById(ref.memberId, { firstName: 1 }).lean() : null;
   ok(res, { referrer: ref ? { code: ref.code, firstName: owner?.firstName ?? null } : null });
 });
@@ -81,6 +83,7 @@ publicRouter.get("/referrers/:code", async (req, res) => {
 publicRouter.post("/signup", signupLimiter, validate(signupSchema), async (req: Request, res) => {
   if (!(await verifyBotToken(req.body.botToken, clientIp(req)))) throw BadRequest("Please try again.", { botToken: ["Please try again."] });
   const r = await memberService.signup(req.body, { ipCountry: ipCountry(req), userAgent: userAgent(req), visitorHash: visitorHash(req), cookieRef: req.cookies?.[REF_COOKIE] });
+  publish("signup", { kind: r.kind, language: req.body.language, referrerSignup: r.kind === "referrer" || r.kind === "upgraded" });
   ok(res, r, undefined, r.kind === "already" ? 200 : 201);
 });
 
@@ -91,6 +94,7 @@ publicRouter.post("/buy-click", trackingLimiter, validate(buySchema), async (req
   const r = await referrerService.findActiveByCode(req.body.ref || req.cookies?.[REF_COOKIE]);
   const code = r?.code ?? s.generalVipCode;
   await trackingService.buyClick(r?._id ?? null, req.body.lang, code);
+  publish("buy_click", { lang: req.body.lang, referrerCode: r?.code ?? null });
   const url = (req.body.lang === "es" ? s.bookLinkEs || s.bookLinkEn : s.bookLinkEn || s.bookLinkEs) || null;
   ok(res, { url, code, siteMode: s.siteMode });
 });

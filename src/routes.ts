@@ -12,6 +12,7 @@ import { salesRouter } from "./modules/sales/sales.routes";
 import { payoutRouter } from "./modules/payouts/payout.routes";
 import { emailRouter } from "./modules/emails/email.routes";
 import { activityRouter, reportsRouter } from "./modules/reports/reports.routes";
+import { realtimeRouter } from "./modules/realtime/realtime.routes";
 
 export const apiRouter = Router();
 
@@ -33,4 +34,5 @@ admin.use("/emails", emailRouter);                // A10
 admin.use("/content", contentRouter);             // A11
 admin.use("/reports", reportsRouter);             // A13
 admin.use("/activity", activityRouter);           // A1 activity log
+admin.use("/events", realtimeRouter);             // live updates for the panel (SSE)
 apiRouter.use("/admin", admin);

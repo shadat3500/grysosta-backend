@@ -54,5 +54,6 @@ payoutRouter.get("/", validate(pagination.merge(dateRange).extend({ referrerId: 
 payoutRouter.get("/paypal-export", async (_req, res) => {
   const s = await settingsService.get();
   const rows = (await referrerService.withStats()).filter((r) => r.status !== "blocked" && r.stats.ready >= s.minPayout);
-  sendExport(res, rows.map((r) => ({ "Recipient email": r.payoutEmail || r.email, Amount: r.stats.ready.toFixed(2), Currency: "USD", "Recipient ID": r.code, Note: "GRYSOSTA referral commission" })), "paypal-bulk-payouts", "csv");
+  const columns = ["Recipient email", "Amount", "Currency", "Recipient ID", "Note"];
+  sendExport(res, rows.map((r) => ({ "Recipient email": r.payoutEmail || r.email, Amount: r.stats.ready.toFixed(2), Currency: "USD", "Recipient ID": r.code, Note: "GRYSOSTA referral commission" })), "paypal-bulk-payouts", "csv", columns);
 });
