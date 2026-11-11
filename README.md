@@ -59,6 +59,20 @@ Bulk email goes through a MongoDB outbox: jobs are claimed one at a time with an
 Every hot query has an index. Referrer stats are batch aggregations, not one query per referrer.
 For several instances, plug a shared store (e.g. Redis) into `common/rateLimit.ts` and move uploads to object storage (`common/upload.ts`).
 
+## Client update: sign-up options, Prepay, referrals, invitations
+
+Implemented from the client's feedback (Georgino Perez). Each rule is listed where it lives:
+
+- **Three options** (`member.model.ts` `tier`): **Prepay** (paid, first shipping priority), **Reserve** (name + email, no payment, second priority), **VIP Priority List** (free, third priority). Public signup accepts `tier: reserve | vip`. Existing members can be upgraded (Reserve over VIP) but never moved down. Admin can change a member's tier.
+- **Prepay** (`/public/prepay/checkout`): 10% off ($59.99 → $53.99, `vipPrice`). Creates a Stripe Checkout session; the buyer pays on GRYSOSTA.com. The member becomes Prepay only when the webhook confirms the payment. Locked while `prepayEnabled` is false (manuals not shipped yet). The buyer stays on the VIP list until paid.
+- **No Etsy/eBay links**: `/public/site` no longer returns `bookLink*`, buy-click returns `url: null`, and e-mails point to the checkout.
+- **Referral program locked** until `referralEnabled` is switched on. While locked: the referral checkbox is ignored, referral links are not counted, admins cannot create referrers, and the referrer dashboard/magic links are closed (423).
+- **Commission**: flat **$3.50** per qualifying sale (`commissionMode: flat`, `commissionFlat`). Still pending for `holdingDays` (30) before it is approved. Set `commissionMode: percent` to use the old % rule.
+- **Invitations** (`POST /admin/invitations/send {groups: ["reserve","vip"], batchSize?}`): only while Prepay is on. Sends the purchase invitation (E7) in priority order (Reserve first, then VIP), oldest sign-up first, at most `batchSize` (default `inviteBatchSize` = 50). Each person is invited once; unsubscribed people are skipped.
+- **Stripe webhook** (`/public/stripe/webhook`): verified with the raw body and `STRIPE_WEBHOOK_SECRET`. Idempotent. A refund (admin or `charge.refunded`) cancels the commission and moves the member back to VIP if they have no other paid order.
+
+New admin endpoints: `PATCH /settings/features {prepayEnabled, referralEnabled}`, `GET /members/groups`, `GET /orders?status&q&from&to&format`, `GET /orders/summary`, `POST /orders/:id/refund`, `GET /invitations/summary`, `GET /payouts/monthly`. Members accept `tier` in list filters, PATCH, and exports.
+
 ## API reference
 
 Base URL: `/api/v1`. Responses are `{ success: true, data, meta? }` or `{ success: false, error: { code, message, details? } }`.

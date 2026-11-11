@@ -1,8 +1,8 @@
-import { Router, type Request, type Response } from "express";
+import { Router, type NextFunction, type Request, type Response } from "express";
 import { z } from "zod";
 import { ok } from "../../common/http";
 import { langEnum, validate } from "../../common/validate";
-import { BadRequest, NotFound } from "../../common/errors";
+import { BadRequest, Locked, NotFound } from "../../common/errors";
 import { magicLinkLimiter, signupLimiter, trackingLimiter } from "../../common/rateLimit";
 import { clientIp, ipCountry, userAgent, visitorHash } from "../../common/request";
 import { verifyBotToken } from "../../common/turnstile";
@@ -22,9 +22,17 @@ import { Session } from "../auth/session.model";
 import { REFERRER_COOKIE, requireReferrer } from "../auth/auth.middleware";
 import { sha256 } from "../../common/utils/crypto";
 import { publish } from "../../common/realtime";
+import { prepayRouter } from "../payments/payment.routes";
 
 export const publicRouter = Router();
 const REF_COOKIE = "gsta_ref";
+publicRouter.use("/prepay", prepayRouter); // Prepay checkout + payment status (Stripe)
+
+/** The referral program (links, dashboard, magic links) stays locked until it is switched on for launch. */
+async function requireReferralOpen(_req: Request, _res: Response, next: NextFunction) {
+  if (!(await settingsService.get()).referralEnabled) throw Locked("The referral program opens at launch.");
+  next();
+}
 
 async function setRefCookie(res: Response, code: string) {
   const s = await settingsService.get();
@@ -45,8 +53,9 @@ publicRouter.get("/site", async (_req, res) => {
       siteMode: s.siteMode, regularPrice: s.regularPrice, vipPrice: s.vipPrice, discountPercent: s.discountPercent,
       commissionPercent: s.commissionPercent, minPayout: s.minPayout, holdingDays: s.holdingDays, cookieDays: s.cookieDays,
       generalVipCode: s.siteMode === "launch" ? s.generalVipCode : null,
-      bookLinkEn: s.siteMode === "launch" ? s.bookLinkEn || s.bookLinkEs : null,
-      bookLinkEs: s.siteMode === "launch" ? s.bookLinkEs || s.bookLinkEn : null,
+      // Client decision: no Etsy/eBay links. Prepay (Stripe) and referrals are switched on by the admin.
+      prepayEnabled: s.prepayEnabled, referralEnabled: s.referralEnabled,
+      commissionMode: s.commissionMode, commissionFlat: s.commissionFlat,
       launchDate: s.launchDate, contactEmail: s.contactEmail, social: s.social, gaId: s.gaId,
     },
     content: c,
@@ -62,10 +71,10 @@ publicRouter.post("/visits", trackingLimiter, validate(visitSchema), async (req,
   await trackingService.pageVisit(hash, req.body.lang, req.body.utmSource);
   let ref = null;
   if (req.body.ref) {
-    const r = await referrerService.findActiveByCode(req.body.ref);
+    const r = await referrerService.findActivePublic(req.body.ref);
     if (r) { await trackingService.referralVisit(r._id, hash, req.body.lang); await setRefCookie(res, r.code); ref = r; }
   }
-  if (!ref) ref = await referrerService.findActiveByCode(req.cookies?.[REF_COOKIE]);
+  if (!ref) ref = await referrerService.findActivePublic(req.cookies?.[REF_COOKIE]);
   publish("visit", { lang: req.body.lang, referrerCode: ref?.code ?? null });
   const owner = ref?.memberId ? await Member.findById(ref.memberId, { firstName: 1 }).lean() : null;
   ok(res, { referrer: ref ? { code: ref.code, firstName: owner?.firstName ?? null } : null });
@@ -73,7 +82,7 @@ publicRouter.post("/visits", trackingLimiter, validate(visitSchema), async (req,
 
 /** Welcome bar lookup ("You were invited by …"). Invalid / blocked codes → 404 (ignored by the UI). */
 publicRouter.get("/referrers/:code", async (req, res) => {
-  const r = await referrerService.findActiveByCode(String(req.params.code));
+  const r = await referrerService.findActivePublic(String(req.params.code));
   if (!r) throw NotFound("Referrer");
   const owner = r.memberId ? await Member.findById(r.memberId, { firstName: 1 }).lean() : null;
   ok(res, { code: r.code, firstName: owner?.firstName ?? null });
@@ -83,7 +92,7 @@ publicRouter.get("/referrers/:code", async (req, res) => {
 publicRouter.post("/signup", signupLimiter, validate(signupSchema), async (req: Request, res) => {
   if (!(await verifyBotToken(req.body.botToken, clientIp(req)))) throw BadRequest("Please try again.", { botToken: ["Please try again."] });
   const r = await memberService.signup(req.body, { ipCountry: ipCountry(req), userAgent: userAgent(req), visitorHash: visitorHash(req), cookieRef: req.cookies?.[REF_COOKIE] });
-  publish("signup", { kind: r.kind, language: req.body.language, referrerSignup: r.kind === "referrer" || r.kind === "upgraded" });
+  publish("signup", { kind: r.kind, tier: req.body.tier, language: req.body.language, referrerSignup: r.kind === "referrer" || r.kind === "upgraded" });
   ok(res, r, undefined, r.kind === "already" ? 200 : 201);
 });
 
@@ -91,12 +100,12 @@ publicRouter.post("/signup", signupLimiter, validate(signupSchema), async (req: 
 const buySchema = z.object({ lang: langEnum.default("en"), ref: z.string().max(30).optional().nullable() });
 publicRouter.post("/buy-click", trackingLimiter, validate(buySchema), async (req, res) => {
   const s = await settingsService.get();
-  const r = await referrerService.findActiveByCode(req.body.ref || req.cookies?.[REF_COOKIE]);
+  const r = await referrerService.findActivePublic(req.body.ref || req.cookies?.[REF_COOKIE]);
   const code = r?.code ?? s.generalVipCode;
   await trackingService.buyClick(r?._id ?? null, req.body.lang, code);
   publish("buy_click", { lang: req.body.lang, referrerCode: r?.code ?? null });
-  const url = (req.body.lang === "es" ? s.bookLinkEs || s.bookLinkEn : s.bookLinkEn || s.bookLinkEs) || null;
-  ok(res, { url, code, siteMode: s.siteMode });
+  // No external store link any more: the buyer continues to the Prepay checkout on the site.
+  ok(res, { url: null, code, siteMode: s.siteMode, prepayEnabled: s.prepayEnabled });
 });
 
 /** /unsubscribe?token=… one click + Resubscribe (SRS 4.7, CAN-SPAM). */
@@ -115,8 +124,9 @@ publicRouter.post("/resubscribe", validate(tokenSchema), async (req, res) => {
 /* ---------------- /my-referrals (SRS 6.7) ---------------- */
 const magicSchema = z.object({ email: z.string().trim().toLowerCase().email(), lang: langEnum.default("en") });
 publicRouter.post("/my-referrals/request", magicLinkLimiter, validate(magicSchema), async (req, res) => {
+  const open = (await settingsService.get()).referralEnabled;
   const m = await Member.findOne({ email: req.body.email }).lean();
-  const r = m ? await Referrer.findOne({ memberId: m._id }).lean() : null;
+  const r = m && open ? await Referrer.findOne({ memberId: m._id }).lean() : null;
   let devMagicToken: string | undefined;
   if (m && r) {
     const token = await createSession("magic", r._id, 30 * 60_000);
@@ -127,7 +137,7 @@ publicRouter.post("/my-referrals/request", magicLinkLimiter, validate(magicSchem
   ok(res, { message: "If this email belongs to a referrer, a magic link has been sent.", ...(devMagicToken ? { devMagicToken } : {}) }); // no enumeration
 });
 
-publicRouter.post("/my-referrals/verify", magicLinkLimiter, validate(tokenSchema), async (req, res) => {
+publicRouter.post("/my-referrals/verify", magicLinkLimiter, requireReferralOpen, validate(tokenSchema), async (req, res) => {
   const s = await Session.findOneAndDelete({ tokenHash: sha256(req.body.token), kind: "magic", expiresAt: { $gt: new Date() } }).lean(); // single use
   if (!s) throw BadRequest("This link is invalid or has expired. Please request a new one.");
   const token = await createSession("referrer", s.subjectId, 24 * 3_600_000, userAgent(req));
@@ -135,7 +145,7 @@ publicRouter.post("/my-referrals/verify", magicLinkLimiter, validate(tokenSchema
   ok(res, { token, expiresInHours: 24 });
 });
 
-publicRouter.get("/my-referrals", requireReferrer, async (req, res) => {
+publicRouter.get("/my-referrals", requireReferralOpen, requireReferrer, async (req, res) => {
   const [row] = await referrerService.withStats({ _id: req.referrerId });
   if (!row) throw NotFound("Referrer");
   const { stats, ...r } = row;
@@ -143,7 +153,7 @@ publicRouter.get("/my-referrals", requireReferrer, async (req, res) => {
 });
 
 const payoutSchema = z.object({ payoutEmail: z.string().trim().toLowerCase().email() });
-publicRouter.patch("/my-referrals/payout", requireReferrer, validate(payoutSchema), async (req, res) => {
+publicRouter.patch("/my-referrals/payout", requireReferralOpen, requireReferrer, validate(payoutSchema), async (req, res) => {
   await Referrer.updateOne({ _id: req.referrerId }, { payoutEmail: req.body.payoutEmail, payoutMethod: "PayPal" });
   ok(res, { payoutEmail: req.body.payoutEmail });
 });

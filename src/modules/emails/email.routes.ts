@@ -15,7 +15,7 @@ const templateSchema = z.object({ subjectEn: z.string().min(1).max(300), subject
 const testSchema = z.object({ lang: langEnum.default("en"), to: z.string().email().optional(), subject: z.string().max(300).optional(), body: z.string().max(20000).optional() });
 const audienceSchema = z.object({ audience: z.enum(["all", "en", "es", "referrers"]).default("all") });
 
-export const PLACEHOLDERS = ["{first_name}", "{code}", "{referral_link}", "{book_link}", "{price}", "{vip_price}", "{commission_percent}", "{unsubscribe_link}"];
+export const PLACEHOLDERS = ["{first_name}", "{code}", "{referral_link}", "{book_link}", "{checkout_link}", "{price}", "{vip_price}", "{commission_amount}", "{commission_percent}", "{unsubscribe_link}"];
 
 export const emailRouter = Router();
 

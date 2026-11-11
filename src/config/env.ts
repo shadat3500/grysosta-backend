@@ -28,6 +28,9 @@ const schema = z.object({
   TURNSTILE_SECRET: z.string().default(""),
   JOBS_ENABLED: bool.default(true),
   JOBS_TIMEZONE: z.string().default("America/Chicago"),
+  /** Stripe (Prepay checkout). Leave empty locally: checkout then answers 503 "not configured". */
+  STRIPE_SECRET_KEY: z.string().default(""),
+  STRIPE_WEBHOOK_SECRET: z.string().default(""),
 });
 
 const parsed = schema.safeParse(process.env);

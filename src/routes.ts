@@ -13,6 +13,8 @@ import { payoutRouter } from "./modules/payouts/payout.routes";
 import { emailRouter } from "./modules/emails/email.routes";
 import { activityRouter, reportsRouter } from "./modules/reports/reports.routes";
 import { realtimeRouter } from "./modules/realtime/realtime.routes";
+import { orderRouter } from "./modules/payments/payment.routes";
+import { invitationRouter } from "./modules/invitations/invitation.routes";
 
 export const apiRouter = Router();
 
@@ -35,4 +37,6 @@ admin.use("/content", contentRouter);             // A11
 admin.use("/reports", reportsRouter);             // A13
 admin.use("/activity", activityRouter);           // A1 activity log
 admin.use("/events", realtimeRouter);             // live updates for the panel (SSE)
+admin.use("/orders", orderRouter);                // Prepay orders & payments (Stripe)
+admin.use("/invitations", invitationRouter);      // purchase invitations, batch control
 apiRouter.use("/admin", admin);

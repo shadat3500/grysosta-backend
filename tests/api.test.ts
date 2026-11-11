@@ -9,6 +9,7 @@ import { sentMail } from "../src/modules/emails/email.provider";
 import { Sale } from "../src/modules/sales/sales.models";
 import { Session } from "../src/modules/auth/session.model";
 import { totp } from "../src/modules/auth/auth.service";
+import { settingsService } from "../src/modules/settings/settings.service";
 import { UPLOAD_DIR } from "../src/common/upload";
 import fs from "node:fs";
 import path from "node:path";
@@ -28,6 +29,8 @@ beforeAll(async () => {
   await mongoose.connection.dropDatabase();
   await connectDB();
   await bootstrap();
+  // The referral program is locked until launch (client decision); these tests cover it, so switch it on.
+  await settingsService.update({ referralEnabled: true });
 });
 afterAll(async () => { await mongoose.connection.dropDatabase(); await disconnectDB(); });
 
@@ -183,7 +186,8 @@ describe("Launch mode (SRS 14.3)", () => {
   it("site config hides the buy link in pre-launch", async () => {
     const r = await request(app).get(`${API}/public/site`);
     expect(r.body.data.settings.siteMode).toBe("prelaunch");
-    expect(r.body.data.settings.bookLinkEn).toBeNull();
+    expect(r.body.data.settings.bookLinkEn).toBeUndefined(); // no Etsy/eBay links on the site
+    expect(r.body.data.settings.prepayEnabled).toBe(false);   // Prepay locked until manuals ship
   });
   it("switches mode and sets book links / prices", async () => {
     const r = await request(app).patch(`${API}/admin/settings/site-mode`).set(auth()).send({ siteMode: "launch", bookLinkEn: "https://www.etsy.com/listing/1/en", bookLinkEs: "https://www.etsy.com/listing/2/es", regularPrice: 59.99, autoVipPrice: true });
@@ -194,7 +198,7 @@ describe("Launch mode (SRS 14.3)", () => {
     const list = await request(app).get(`${API}/admin/referrers?q=john`).set(auth());
     const code = list.body.data[0].code;
     const a = await request(app).post(`${API}/public/buy-click`).send({ lang: "es", ref: code });
-    expect(a.body.data).toMatchObject({ url: "https://www.etsy.com/listing/2/es", code });
+    expect(a.body.data).toMatchObject({ url: null, code }); // purchases go through the Stripe checkout, not Etsy
     const b = await request(app).post(`${API}/public/buy-click`).send({ lang: "en" });
     expect(b.body.data.code).toBe("GSTAVIP10");
     const again = await request(app).get(`${API}/admin/referrers?q=john`).set(auth());
@@ -209,13 +213,12 @@ describe("Launch mode (SRS 14.3)", () => {
     const log = await request(app).get(`${API}/admin/emails/logs/${r.body.data._id}`).set(auth());
     expect(log.body.data.status).toBe("done");
     expect(log.body.data.progress).toBe(100);
-    const maria = sentMail.find((m) => m.to === "maria@example.com")!; // referred by John → John's code
-    const john = sentMail.find((m) => m.to === "john@example.com")!;   // own code
-    const self = sentMail.find((m) => m.to === "self@example.com")!;   // general code
-    expect(maria.text).toMatch(/GSTAJOHN\d{2}/);
-    expect(john.text).toMatch(/GSTAJOHN\d{2}/);
-    expect(self.text).toContain("GSTAVIP10");
-    expect(john.text).toContain("https://www.etsy.com/listing/1/en");
+    const maria = sentMail.find((m) => m.to === "maria@example.com")!;
+    const self = sentMail.find((m) => m.to === "self@example.com")!;
+    // E4 (client copy): Prepay price on the site, no Etsy links and no coupon code any more
+    expect(maria.text).toContain("$53.99");
+    expect(self.text).toContain("$53.99");
+    expect(sentMail.some((m) => /etsy|ebay/i.test(m.text))).toBe(false);
   });
 });
 
@@ -243,11 +246,11 @@ describe("Sales import & commissions (SRS 14.5)", () => {
   });
 
   let draftId = "";
-  it("preview: 10 known, 5 general, 3 none, 2 unknown, $5.40 each", async () => {
+  it("preview: 10 known, 5 general, 3 none, 2 unknown, $3.50 each", async () => {
     const r = await request(app).post(`${API}/admin/sales/import/preview`).set(auth()).attach("file", Buffer.from(csv), "EtsySoldOrders.csv");
     expect(r.status).toBe(200);
     draftId = r.body.data.draftId;
-    expect(r.body.data.summary).toMatchObject({ rowsFound: 20, knownCode: 10, generalCode: 5, noCode: 3, unknownCode: 2, duplicates: 0, commissionTotal: 54 });
+    expect(r.body.data.summary).toMatchObject({ rowsFound: 20, knownCode: 10, generalCode: 5, noCode: 3, unknownCode: 2, duplicates: 0, commissionTotal: 35 });
     expect(r.body.data.unknownCodes).toEqual(["GSTAUNKNOWN11", "FRIEND2026"]);
   });
 
@@ -264,7 +267,7 @@ describe("Sales import & commissions (SRS 14.5)", () => {
     expect(r.status).toBe(201);
     expect(r.body.data.rowsAdded).toBe(19);
     const s = await Sale.find({ couponCode: codes[0] }).lean();
-    expect(s[0]).toMatchObject({ commissionAmount: 5.4, commissionPercent: 10, commissionStatus: "pending", baseAmount: 53.99 });
+    expect(s[0]).toMatchObject({ commissionAmount: 3.5, commissionStatus: "pending", baseAmount: 53.99 });
     expect(await Sale.countDocuments({ couponCode: "GSTAVIP10", referrerId: null })).toBe(5);
   });
 
@@ -282,25 +285,25 @@ describe("Sales import & commissions (SRS 14.5)", () => {
     expect(h.body.data[0].undone).toBe(true);
   });
 
-  it("commission % change affects only new sales", async () => {
-    await request(app).patch(`${API}/admin/settings`).set(auth()).send({ commissionPercent: 20 });
+  it("flat commission ($3.50 default) change affects only new sales", async () => {
+    await request(app).patch(`${API}/admin/settings`).set(auth()).send({ commissionFlat: 5 });
     const m = await request(app).post(`${API}/admin/sales/manual`).set(auth()).send({ saleDate: "2026-11-02", orderId: "M-1", code: codes[1], amount: 53.99, quantity: 1 });
-    expect(m.body.data.commissionAmount).toBe(10.8);
-    expect((await Sale.findOne({ orderId: "9000" }).lean())!.commissionAmount).toBe(5.4);
-    await request(app).patch(`${API}/admin/settings`).set(auth()).send({ commissionPercent: 10 });
+    expect(m.body.data.commissionAmount).toBe(5);
+    expect((await Sale.findOne({ orderId: "9000" }).lean())!.commissionAmount).toBe(3.5);
+    await request(app).patch(`${API}/admin/settings`).set(auth()).send({ commissionFlat: 3.5 });
   });
 
   it("holding period → approved; payout moves commissions to Paid", async () => {
     await Sale.updateMany({ couponCode: codes[0] }, { saleDate: new Date(Date.now() - 40 * 86_400_000) });
-    await Sale.create({ orderId: "OLD-2", saleDate: new Date(Date.now() - 45 * 86_400_000), couponCode: codes[0], referrerId: (await Sale.findOne({ couponCode: codes[0] }))!.referrerId, orderValue: 59.99, discount: 6, baseAmount: 53.99, commissionPercent: 10, commissionAmount: 5.4, commissionStatus: "pending" });
-    await Sale.create({ orderId: "OLD-3", saleDate: new Date(Date.now() - 45 * 86_400_000), couponCode: codes[0], referrerId: (await Sale.findOne({ couponCode: codes[0] }))!.referrerId, orderValue: 59.99, discount: 6, baseAmount: 53.99, commissionPercent: 10, commissionAmount: 5.4, commissionStatus: "pending" });
+    await Sale.create({ orderId: "OLD-2", saleDate: new Date(Date.now() - 45 * 86_400_000), couponCode: codes[0], referrerId: (await Sale.findOne({ couponCode: codes[0] }))!.referrerId, orderValue: 59.99, discount: 6, baseAmount: 53.99, commissionPercent: 10, commissionAmount: 3.5, commissionStatus: "pending" });
+    await Sale.create({ orderId: "OLD-3", saleDate: new Date(Date.now() - 45 * 86_400_000), couponCode: codes[0], referrerId: (await Sale.findOne({ couponCode: codes[0] }))!.referrerId, orderValue: 59.99, discount: 6, baseAmount: 53.99, commissionPercent: 10, commissionAmount: 3.5, commissionStatus: "pending" });
     const a = await request(app).post(`${API}/admin/sales/approve-due`).set(auth());
     expect(a.body.data.approved).toBeGreaterThanOrEqual(3);
     const sum = await request(app).get(`${API}/admin/payouts/summary?q=${codes[0]}`).set(auth());
     const row = sum.body.data[0];
-    expect(row.stats.ready).toBe(16.2);
+    expect(row.stats.ready).toBe(10.5); // three $3.50 commissions
     expect(row.readyToPay).toBe(false); // below $20 minimum
-    const p = await request(app).post(`${API}/admin/payouts`).set(auth()).send({ referrerId: row.id, amount: 16.2, paidOn: "2026-11-02", method: "PayPal", transactionId: "TX1" });
+    const p = await request(app).post(`${API}/admin/payouts`).set(auth()).send({ referrerId: row.id, amount: 10.5, paidOn: "2026-11-02", method: "PayPal", transactionId: "TX1" });
     expect(p.body.data.salesCovered).toBe(3);
     expect(await Sale.countDocuments({ couponCode: codes[0], commissionStatus: "paid" })).toBe(3);
   });
@@ -311,7 +314,7 @@ describe("Sales import & commissions (SRS 14.5)", () => {
     expect(r.body.data.commissionStatus).toBe("cancelled");
     expect(r.body.data.clawbackOpen).toBe(true);
     const d = await request(app).get(`${API}/admin/referrers/${paid!.referrerId}`).set(auth());
-    expect(d.body.data.stats.unpaid).toBe(-5.4);
+    expect(d.body.data.stats.unpaid).toBe(-3.5);
   });
 });
 
@@ -462,7 +465,7 @@ describe("Full endpoint coverage", () => {
     expect(p.body.data.social.instagram).toBe("https://instagram.com/grysosta");
     await request(app).patch(`${API}/admin/settings`).set(auth()).send({ minPayout: originalMin });
     expect((await request(app).patch(`${API}/admin/settings/site-mode`).set(auth()).send({ siteMode: "prelaunch" })).status).toBe(200);
-    expect((await request(app).get(`${API}/public/site`)).body.data.settings.bookLinkEn).toBeNull();
+    expect((await request(app).get(`${API}/public/site`)).body.data.settings.bookLinkEn).toBeUndefined();
     expect((await request(app).patch(`${API}/admin/settings/site-mode`).set(auth()).send({ siteMode: "launch" })).status).toBe(200);
   });
 
@@ -596,7 +599,7 @@ describe("Admin modules", () => {
 
   it("A10 emails: templates, edit, test send", async () => {
     const t = await request(app).get(`${API}/admin/emails/templates`).set(auth());
-    expect(t.body.data.map((x: { key: string }) => x.key)).toEqual(["E1", "E2", "E3", "E4", "E5", "E6"]);
+    expect(t.body.data.map((x: { key: string }) => x.key)).toEqual(["E1", "E2", "E3", "E4", "E5", "E6", "E7"]);
     await request(app).put(`${API}/admin/emails/templates/E1`).set(auth()).send({ subjectEn: "Hello {first_name}!" });
     sentMail.length = 0;
     const s = await request(app).post(`${API}/admin/emails/templates/E1/test`).set(auth()).send({ lang: "en" });

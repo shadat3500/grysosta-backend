@@ -3,7 +3,7 @@ import { ok } from "../../common/http";
 import { validate } from "../../common/validate";
 import { audit } from "../activity/activity.service";
 import { settingsService } from "./settings.service";
-import { siteModeSchema, updateSettingsSchema } from "./settings.schema";
+import { featuresSchema, siteModeSchema, updateSettingsSchema } from "./settings.schema";
 import { Referrer } from "../referrers/referrer.model";
 import { Conflict } from "../../common/errors";
 
@@ -11,6 +11,17 @@ export const settingsRouter = Router();
 
 /** A12 */
 settingsRouter.get("/", async (_req, res) => ok(res, await settingsService.get()));
+
+/** Client switches: turn Prepay and the referral program on or off (each change is logged). */
+settingsRouter.patch("/features", validate(featuresSchema), async (req, res) => {
+  const before = await settingsService.get();
+  const doc = await settingsService.update(req.body);
+  const labels: Record<string, string> = { prepayEnabled: "Prepay", referralEnabled: "Referral program" };
+  for (const k of Object.keys(labels) as (keyof typeof labels)[]) {
+    if (k in req.body && before[k as "prepayEnabled"] !== req.body[k]) await audit(req, `${labels[k]} turned ${req.body[k] ? "ON" : "OFF"}`, "settings", undefined, labels[k]);
+  }
+  ok(res, doc);
+});
 
 settingsRouter.patch("/", validate(updateSettingsSchema), async (req, res) => {
   const doc = await settingsService.update(req.body);

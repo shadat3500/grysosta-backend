@@ -56,6 +56,13 @@ export const referrerService = {
     return r as ReferrerDoc | null;
   },
 
+  /** Public attribution (?ref=, cookie, signup, purchase). Ignored entirely while the referral program is locked. */
+  async findActivePublic(raw?: string | null) {
+    const s = await settingsService.get();
+    if (!s.referralEnabled) return null;
+    return this.findActiveByCode(raw);
+  },
+
   async changeCode(id: string, raw: string) {
     const code = normalizeCode(raw);
     if (code.length < 4) throw BadRequest("Code must be at least 4 letters/numbers");

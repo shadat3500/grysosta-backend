@@ -7,6 +7,9 @@ export const updateSettingsSchema = z
     commissionPercent: z.number().min(0).max(50),
     discountPercent: z.number().min(0).max(90),
     commissionBase: z.enum(["after_discount", "net"]),
+    commissionMode: z.enum(["flat", "percent"]),
+    commissionFlat: z.number().min(0).max(100),
+    inviteBatchSize: z.number().int().min(1).max(1000),
     etsyFeePercent: z.number().min(0).max(50),
     minPayout: z.number().min(0),
     holdingDays: z.number().int().min(0).max(365),
@@ -34,3 +37,6 @@ export const siteModeSchema = z
   })
   .partial()
   .strict();
+
+/** Client switches: Prepay and Referral program (locked until launch). */
+export const featuresSchema = z.object({ prepayEnabled: z.boolean(), referralEnabled: z.boolean() }).partial().strict();

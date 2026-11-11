@@ -3,7 +3,7 @@ import { Schema, Types, model, type InferSchemaType } from "mongoose";
 const saleSchema = new Schema(
   {
     orderId: { type: String, required: true, unique: true },
-    platform: { type: String, enum: ["etsy", "manual"], default: "etsy" },
+    platform: { type: String, enum: ["etsy", "manual", "stripe"], default: "etsy" },
     saleDate: { type: Date, required: true },
     couponCode: { type: String, default: "", index: true },
     referrerId: { type: Types.ObjectId, ref: "Referrer", default: null, index: true },

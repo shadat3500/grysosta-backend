@@ -2,7 +2,8 @@ import { Router } from "express";
 import { Types } from "mongoose";
 import { ok, pageMeta, sortSpec } from "../../common/http";
 import { idParams, validate } from "../../common/validate";
-import { BadRequest, NotFound } from "../../common/errors";
+import { BadRequest, Locked, NotFound } from "../../common/errors";
+import { settingsService } from "../settings/settings.service";
 import { sendExport } from "../../common/utils/export";
 import { env } from "../../config/env";
 import { audit } from "../activity/activity.service";
@@ -36,6 +37,9 @@ memberRouter.post("/bulk", validate(bulkSchema), async (req, res) => {
   ok(res, { affected: n });
 });
 
+/** Registrations per group (Prepay / Reserve / VIP): total, paid, invited. */
+memberRouter.get("/groups", async (_req, res) => ok(res, await memberService.groupCounts()));
+
 memberRouter.get("/:id", validate(idParams, "params"), async (req, res) => {
   const m = await Member.findById(req.params.id).populate("referredBy", "code status").lean();
   if (!m) throw NotFound("Member");
@@ -61,6 +65,7 @@ memberRouter.post("/:id/make-referrer", validate(idParams, "params"), async (req
   const m = await Member.findById(req.params.id).lean();
   if (!m) throw NotFound("Member");
   if (m.isReferrer) throw BadRequest("Member is already a referrer");
+  if (!(await settingsService.get()).referralEnabled) throw Locked("The referral program is locked until launch. Switch it on in Settings first.");
   const r = await referrerService.createForMember(m._id, m.firstName);
   await emailService.enqueueForMember("E2", { ...m, isReferrer: true } as never);
   await audit(req, "Made member a referrer", "referrers", String(r._id), r.code);

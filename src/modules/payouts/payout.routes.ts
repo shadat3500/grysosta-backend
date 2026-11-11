@@ -35,6 +35,15 @@ payoutRouter.post("/", validate(recordSchema), async (req, res) => {
   created(res, p);
 });
 
+/** Monthly payout totals (client: review monthly totals). Month = payment date, newest first. */
+payoutRouter.get("/monthly", async (_req, res) => {
+  const rows = await Payout.aggregate([
+    { $group: { _id: { $dateToString: { format: "%Y-%m", date: "$paidOn" } }, amount: { $sum: "$amount" }, payouts: { $sum: 1 } } },
+    { $sort: { _id: -1 } },
+  ]);
+  ok(res, rows.map((r) => ({ month: r._id as string, amount: round2(r.amount as number), payouts: r.payouts as number })));
+});
+
 payoutRouter.get("/", validate(pagination.merge(dateRange).extend({ referrerId: objectId.optional(), format: z.enum(["json", "csv", "xlsx"]).default("json") }), "query"), async (req, res) => {
   const q = req.query as unknown as { page: number; limit: number; from?: string; to?: string; referrerId?: string; format: string };
   const f: Record<string, unknown> = {};

@@ -6,6 +6,15 @@ const settingsSchema = new Schema(
     commissionPercent: { type: Number, default: 10, min: 0, max: 50 },
     discountPercent: { type: Number, default: 10, min: 0, max: 90 },
     commissionBase: { type: String, enum: ["after_discount", "net"], default: "after_discount" },
+    /** Client decision: flat $ per qualifying sale (default). "percent" keeps the old % rule. */
+    commissionMode: { type: String, enum: ["flat", "percent"], default: "flat" },
+    commissionFlat: { type: Number, default: 3.5, min: 0 },
+    /** Prepay (10% off, Stripe checkout) stays locked until manuals ship. */
+    prepayEnabled: { type: Boolean, default: false },
+    /** Referral program stays locked until launch. */
+    referralEnabled: { type: Boolean, default: false },
+    /** Default number of customers invited per purchase-invitation batch. */
+    inviteBatchSize: { type: Number, default: 50, min: 1, max: 1000 },
     etsyFeePercent: { type: Number, default: 9.5 },
     minPayout: { type: Number, default: 20 },
     holdingDays: { type: Number, default: 30 },

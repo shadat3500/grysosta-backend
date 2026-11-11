@@ -19,7 +19,7 @@ export type Audience = "all" | "en" | "es" | "referrers";
 export const AUDIENCE_LABEL: Record<Audience, string> = { all: "All members", en: "English only", es: "Spanish only", referrers: "Referrers only" };
 
 /** E1–E4 are never sent to unsubscribed members (SRS 7.2). */
-const MARKETING: string[] = ["E1", "E2", "E3", "E4"];
+const MARKETING: string[] = ["E1", "E2", "E3", "E4", "E7"];
 const MAX_ATTEMPTS = 3;
 
 interface Tpl { key: string; name: string; subjectEn: string; subjectEs: string; bodyEn: string; bodyEs: string }
@@ -52,16 +52,19 @@ async function memberVars(m: Pick<MemberDoc, "_id" | "firstName" | "language" | 
     const r = await Referrer.findOne({ _id: m.referredBy, status: "active" }, { code: 1 }).lean();
     if (r) code = r.code;
   }
-  const book = (lang === "es" ? s.bookLinkEs || s.bookLinkEn : s.bookLinkEn || s.bookLinkEs) || env.SITE_URL;
+  // Purchases happen on GRYSOSTA.com (Stripe prepay) — no Etsy/eBay links.
+  const checkout = `${env.SITE_URL}/${lang}#prepay`;
   const link = own ? referralLink(own) : `${env.SITE_URL}/${lang}`;
   return {
     first_name: m.firstName,
     code,
     referral_link: link,
-    book_link: book,
+    book_link: checkout,
+    checkout_link: checkout,
     price: usd(s.regularPrice),
     vip_price: usd(s.vipPrice),
     commission_percent: s.commissionPercent,
+    commission_amount: usd(s.commissionFlat),
     unsubscribe_link: `${env.SITE_URL}/${lang}/unsubscribe?token=${m.unsubscribeToken}`,
     my_referrals_link: `${env.SITE_URL}/${lang}/my-referrals`,
     share_text: lang === "es" ? `Únase con mi enlace y ahorre 10%. #ad — Gano una comisión si compra con mi código ${code}.` : `Join with my link and save 10%! #ad — I earn a commission if you buy with my code ${code}.`,
@@ -75,6 +78,7 @@ const DEFAULT_BUTTON: Record<string, (v: Vars, lang: Lang) => string> = {
   E4: (v) => String(v.book_link),
   E5: (v) => String(v.magic_link ?? env.SITE_URL),
   E6: () => `${env.SITE_URL}/admin`,
+  E7: (v) => String(v.checkout_link ?? env.SITE_URL),
 };
 
 async function render(key: string, lang: Lang, vars: Vars) {

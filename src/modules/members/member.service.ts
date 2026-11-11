@@ -1,29 +1,38 @@
 import { Types } from "mongoose";
-import { Member, type MemberDoc } from "./member.model";
+import { Member, TIER_RANK, tierQuery, type MemberDoc, type Tier } from "./member.model";
 import { Referrer, RetiredCode } from "../referrers/referrer.model";
 import { referralLink, referrerService } from "../referrers/referrer.service";
 import { emailService } from "../emails/email.service";
+import { settingsService } from "../settings/settings.service";
 import type { SignupInput } from "./member.schema";
 import { randomToken } from "../../common/utils/crypto";
 import { escapeRegex } from "../../common/utils/regex";
 import { rangeFilter } from "../../common/validate";
 
 export type SignupResult =
-  | { kind: "vip"; member: Pick<MemberDoc, "firstName" | "email" | "language"> }
+  | { kind: "vip" | "reserve"; member: Pick<MemberDoc, "firstName" | "email" | "language"> }
   | { kind: "referrer" | "upgraded"; member: Pick<MemberDoc, "firstName" | "email" | "language">; code: string; link: string }
   | { kind: "already"; member: Pick<MemberDoc, "firstName" | "email" | "language"> };
 
 const pub = (m: MemberDoc) => ({ firstName: m.firstName, email: m.email, language: m.language });
 
 export const memberService = {
-  /** SRS 2.2 + 6.1 + 6.2 signup / duplicate / upgrade logic. */
+  /**
+   * SRS 2.2 + 6.1 + 6.2 signup / duplicate / upgrade logic.
+   * Tier: a higher-priority option (Reserve over VIP) upgrades an existing member; nobody is ever moved down.
+   * Referral checkbox: ignored while the referral program is locked (settings.referralEnabled = false).
+   */
   async signup(i: SignupInput, meta: { ipCountry: string; userAgent: string; visitorHash: string; cookieRef?: string | null }): Promise<SignupResult> {
+    const s = await settingsService.get();
+    const wantsReferral = s.referralEnabled && i.joinReferral;
     const existing = (await Member.findOne({ email: i.email }).lean()) as MemberDoc | null;
     if (existing) {
-      if (i.joinReferral && !existing.isReferrer) {
+      const current = (existing.tier ?? "vip") as Tier;
+      if (TIER_RANK[i.tier] < TIER_RANK[current]) await Member.updateOne({ _id: existing._id }, { tier: i.tier });
+      if (wantsReferral && !existing.isReferrer) {
         const r = await referrerService.createForMember(existing._id, existing.firstName);
         await emailService.enqueueForMember("E2", { ...existing, isReferrer: true });
-        await Member.updateOne({ _id: existing._id }, { lastWelcomeAt: new Date(), ...(existing.status === "unsubscribed" ? {} : {}) });
+        await Member.updateOne({ _id: existing._id }, { lastWelcomeAt: new Date() });
         return { kind: "upgraded", member: pub(existing), code: r.code, link: referralLink(r.code) };
       }
       // resend welcome, max once per 24 hours
@@ -34,7 +43,7 @@ export const memberService = {
       return { kind: "already", member: pub(existing) };
     }
 
-    const ref = await referrerService.findActiveByCode(i.refCode || meta.cookieRef);
+    const ref = await referrerService.findActivePublic(i.refCode || meta.cookieRef);
     let referredBy: Types.ObjectId | null = ref?._id ?? null;
     if (ref?.memberId) {
       const owner = await Member.findById(ref.memberId, { email: 1 }).lean();
@@ -44,7 +53,7 @@ export const memberService = {
     let m: MemberDoc;
     try {
       m = (await Member.create({
-        firstName: i.firstName, lastName: i.lastName, email: i.email, language: i.language,
+        firstName: i.firstName, lastName: i.lastName, email: i.email, language: i.language, tier: i.tier,
         referredBy, status: "subscribed", unsubscribeToken: randomToken(24), consentAt: now,
         ipCountry: meta.ipCountry, userAgent: meta.userAgent, visitorHash: meta.visitorHash,
         utmSource: i.utmSource || (referredBy ? "referral" : null), utmMedium: i.utmMedium || (referredBy ? "link" : null), utmCampaign: i.utmCampaign || null,
@@ -54,16 +63,16 @@ export const memberService = {
       if ((e as { code?: number }).code === 11000) return this.signup(i, meta); // concurrent duplicate → duplicate path
       throw e;
     }
-    if (i.joinReferral) {
+    if (wantsReferral) {
       const r = await referrerService.createForMember(m._id, m.firstName);
       await emailService.enqueueForMember("E2", { ...m, isReferrer: true });
       return { kind: "referrer", member: pub(m), code: r.code, link: referralLink(r.code) };
     }
     await emailService.enqueueForMember("E1", m);
-    return { kind: "vip", member: pub(m) };
+    return { kind: i.tier, member: pub(m) };
   },
 
-  buildFilter(q: { q?: string; language?: string; status?: string; referredBy?: string; isReferrer?: string; from?: string; to?: string }) {
+  buildFilter(q: { q?: string; language?: string; status?: string; referredBy?: string; isReferrer?: string; tier?: Tier; from?: string; to?: string }) {
     const f: Record<string, unknown> = {};
     if (q.q) {
       const rx = new RegExp(escapeRegex(q.q.trim()), "i");
@@ -72,6 +81,7 @@ export const memberService = {
     if (q.language) f.language = q.language;
     if (q.status) f.status = q.status;
     if (q.isReferrer) f.isReferrer = q.isReferrer === "true";
+    if (q.tier) f.tier = tierQuery(q.tier);
     if (q.referredBy === "any") f.referredBy = { $ne: null };
     else if (q.referredBy === "none") f.referredBy = null;
     else if (q.referredBy) f.referredBy = new Types.ObjectId(q.referredBy);
@@ -97,12 +107,23 @@ export const memberService = {
     return r.modifiedCount;
   },
 
+  /** Registrations per group (Prepay / Reserve / VIP) — total, paid (prepay) and invited. */
+  async groupCounts() {
+    const rows = await Member.aggregate([
+      { $group: { _id: { $ifNull: ["$tier", "vip"] }, total: { $sum: 1 }, paid: { $sum: { $cond: [{ $ne: ["$prepaidAt", null] }, 1, 0] } }, invited: { $sum: { $cond: [{ $ne: ["$invitedAt", null] }, 1, 0] } } } },
+    ]);
+    const out = { prepay: { total: 0, paid: 0, invited: 0 }, reserve: { total: 0, paid: 0, invited: 0 }, vip: { total: 0, paid: 0, invited: 0 } };
+    for (const r of rows) if (r._id in out) out[r._id as Tier] = { total: r.total, paid: r.paid, invited: r.invited };
+    return out;
+  },
+
   async exportRows(filter: Record<string, unknown>) {
     const members = await Member.find(filter).sort({ createdAt: -1 }).lean();
     const refIds = [...new Set(members.map((m) => String(m.referredBy ?? "")).filter(Boolean))];
     const codes = new Map((await Referrer.find({ _id: { $in: refIds } }, { code: 1 }).lean()).map((r) => [String(r._id), r.code]));
     return members.map((m) => ({
-      first_name: m.firstName, last_name: m.lastName, email: m.email, language: m.language, is_referrer: m.isReferrer ? "yes" : "no",
+      first_name: m.firstName, last_name: m.lastName, email: m.email, language: m.language, group: (m.tier ?? "vip") as string, is_referrer: m.isReferrer ? "yes" : "no",
+      paid: m.prepaidAt ? "yes" : "no", invited: m.invitedAt ? "yes" : "no",
       referred_by: m.referredBy ? codes.get(String(m.referredBy)) ?? "" : "", status: m.status,
       utm_source: m.utmSource ?? "", utm_medium: m.utmMedium ?? "", utm_campaign: m.utmCampaign ?? "", ip_country: m.ipCountry, signup_date: (m as unknown as { createdAt: Date }).createdAt.toISOString(),
     }));
