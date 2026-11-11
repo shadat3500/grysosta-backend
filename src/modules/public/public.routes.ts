@@ -9,7 +9,7 @@ import { verifyBotToken } from "../../common/turnstile";
 import { env, isProd } from "../../config/env";
 import { settingsService } from "../settings/settings.service";
 import { contentService } from "../content/content.service";
-import { Announcement } from "../announcements/announcement.model";
+import { Announcement, effectiveStatus } from "../announcements/announcement.model";
 import { Member } from "../members/member.model";
 import { memberService } from "../members/member.service";
 import { signupSchema } from "../members/member.schema";
@@ -163,4 +163,13 @@ publicRouter.post("/my-referrals/logout", requireReferrer, async (req, res) => {
   if (t) await Session.deleteOne({ tokenHash: sha256(t) });
   res.clearCookie(REFERRER_COOKIE, { path: "/" });
   ok(res, { message: "Signed out" });
+});
+
+/** Published announcements for the landing page (no drafts, no expired items). */
+publicRouter.get("/announcements", async (_req, res) => {
+  const now = new Date();
+  const list = await Announcement.find({ status: { $ne: "draft" } }).sort({ pinned: -1, sortOrder: 1, createdAt: -1 }).lean();
+  ok(res, list.filter((a) => effectiveStatus(a, now) === "published").map(({ _id, titleEn, titleEs, bodyEn, bodyEs, imageUrl, buttonTextEn, buttonTextEs, buttonUrl, pinned, sortOrder }) => ({
+    id: String(_id), titleEn, titleEs, bodyEn, bodyEs, imageUrl, buttonTextEn, buttonTextEs, buttonUrl, pinned, sortOrder, status: "published",
+  })));
 });

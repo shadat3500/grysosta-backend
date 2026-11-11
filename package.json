@@ -9,6 +9,7 @@
     "start": "node dist/server.js",
     "seed": "tsx src/scripts/seed.ts",
     "seed:demo": "tsx src/scripts/seed.ts --demo",
+    "db:reset": "tsx src/scripts/reset-db.ts && tsx src/scripts/seed.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
@@ -23,6 +24,7 @@
     "mongoose": "^9.11.4",
     "multer": "^2.5.0",
     "node-cron": "^4.6.0",
+    "nodemailer": "^10.5.0",
     "otpauth": "^9.5.2",
     "papaparse": "^5.7.0",
     "pino": "^10.4.0",
@@ -38,6 +40,7 @@
     "@types/multer": "^2.3.0",
     "@types/node": "^26.6.6",
     "@types/node-cron": "^3.0.11",
+    "@types/nodemailer": "^8.0.2",
     "@types/papaparse": "^5.5.2",
     "@types/supertest": "^7.2.1",
     "pino-pretty": "^13.2.0",

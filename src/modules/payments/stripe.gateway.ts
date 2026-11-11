@@ -8,6 +8,10 @@ export interface CheckoutInput {
   lang: "en" | "es";
   amountCents: number;
   productName: string;
+  /** Shown under the product name on the Stripe checkout page. */
+  productDescription?: string;
+  /** Public https address of the book cover, shown on the Stripe checkout page. */
+  productImageUrl?: string;
   successUrl: string;
   cancelUrl: string;
 }
@@ -35,7 +39,9 @@ const live: PaymentGateway = {
       client_reference_id: i.orderId,
       metadata: { orderId: i.orderId },
       locale: i.lang,
-      line_items: [{ quantity: 1, price_data: { currency: "usd", unit_amount: i.amountCents, product_data: { name: i.productName } } }],
+      line_items: [{ quantity: 1, price_data: { currency: "usd", unit_amount: i.amountCents, product_data: { name: i.productName, description: i.productDescription, images: i.productImageUrl ? [i.productImageUrl] : undefined } } }],
+      // Unpaid checkouts expire after one hour, which triggers the "checkout not completed" email (E9).
+      expires_at: Math.floor(Date.now() / 1000) + 60 * 60,
       success_url: i.successUrl,
       cancel_url: i.cancelUrl,
     });

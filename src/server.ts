@@ -4,11 +4,13 @@ import { env } from "./config/env";
 import { logger } from "./config/logger";
 import { startScheduler } from "./modules/jobs/scheduler";
 import { bootstrap } from "./scripts/bootstrap";
+import { checkSmtpConnection } from "./modules/emails/email.provider";
 
 async function main() {
   const app = createApp(); // registers all models before index sync
   await connectDB();
   await bootstrap();
+  await checkSmtpConnection();
   const stopJobs = startScheduler();
   const server = app.listen(env.PORT, () => logger.info(`🚀 GRYSOSTA API on http://localhost:${env.PORT}${env.API_PREFIX}`));
 

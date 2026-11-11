@@ -1,6 +1,6 @@
 import { Schema, Types, model } from "mongoose";
 
-export const TEMPLATE_KEYS = ["E1", "E2", "E3", "E4", "E5", "E6", "E7"] as const;
+export const TEMPLATE_KEYS = ["E1", "E2", "E3", "E4", "E5", "E6", "E7", "E8", "E9"] as const;
 export type TemplateKey = (typeof TEMPLATE_KEYS)[number];
 
 const templateSchema = new Schema(

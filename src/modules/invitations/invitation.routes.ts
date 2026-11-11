@@ -7,6 +7,9 @@ import { audit } from "../activity/activity.service";
 import { Member, TIER_LABEL, TIER_RANK, tierQuery, type MemberDoc, type Tier } from "../members/member.model";
 import { emailService } from "../emails/email.service";
 import { settingsService } from "../settings/settings.service";
+import { InvitationBatch } from "./invitation.model";
+import { pageMeta } from "../../common/http";
+import { pagination, validate as validateQuery } from "../../common/validate";
 
 /** Only the groups that have not paid yet can be invited (Prepay members have already paid). */
 const INVITE_GROUPS = ["reserve", "vip"] as const;
@@ -49,6 +52,7 @@ invitationRouter.post("/send", validate(sendSchema), async (req, res) => {
   if (batch.length) await Member.updateMany({ _id: { $in: batch.map((m) => m._id) } }, { invitedAt: new Date() });
   let remaining = 0;
   for (const t of groups) remaining += await Member.countDocuments(waitingFilter(t));
+  await InvitationBatch.create({ groups, batchSize: limit, invited: batch.length, byGroup, remaining, createdBy: req.admin?.name ?? "admin" });
   await audit(req, "Sent purchase invitations", "invitations", undefined, `${batch.length} invited (${groups.join(", ")}), batch limit ${limit}`);
   ok(res, { invited: batch.length, byGroup, batchSize: limit, remaining });
 });
@@ -67,4 +71,14 @@ invitationRouter.get("/summary", async (_req, res) => {
     groups[t] = { label: TIER_LABEL[t], total, invited, waiting };
   }
   ok(res, { prepayEnabled: s.prepayEnabled, inviteBatchSize: s.inviteBatchSize, groups });
+});
+
+/** History of sent batches, newest first. */
+invitationRouter.get("/history", validateQuery(pagination, "query"), async (req, res) => {
+  const q = req.query as unknown as { page: number; limit: number };
+  const [items, total] = await Promise.all([
+    InvitationBatch.find().sort({ createdAt: -1 }).skip((q.page - 1) * q.limit).limit(q.limit).lean(),
+    InvitationBatch.countDocuments(),
+  ]);
+  ok(res, items.map((b) => ({ id: String(b._id), at: b.createdAt, groups: b.groups, batchSize: b.batchSize, invited: b.invited, byGroup: b.byGroup, remaining: b.remaining })), pageMeta(total, q));
 });

@@ -50,4 +50,18 @@ export const DEFAULT_TEMPLATES: { key: TemplateKey; name: string; subjectEn: str
     bodyEn: "Hi {first_name},\n\nYour spot on the list is ready. The manual is nearly ready to ship.\n\nPrepay today and save 10%: {vip_price} instead of {price}.\nPrepay customers get first shipping priority.\n\n[PREPAY NOW]\n\nSimple Knowledge. Brighter Opportunities!\nGeorgino Perez, Founder, GRYSOSTA Stock Trading Academy",
     bodyEs: "Hola {first_name}:\n\nSu lugar en la lista está listo. El manual está casi listo para enviarse.\n\nCompre hoy con descuento del 10%: {vip_price} en lugar de {price}.\nQuienes compran por adelantado reciben prioridad de envío.\n\n[COMPRAR AHORA]\n\n¡Conocimiento simple. Oportunidades más brillantes!\nGeorgino Perez, Fundador, GRYSOSTA Stock Trading Academy",
   },
+  {
+    key: "E8", name: "Prepay payment confirmed",
+    subjectEn: "Payment confirmed: you are first in shipping priority, {first_name}!",
+    subjectEs: "¡Pago confirmado: usted tiene la primera prioridad de envío, {first_name}!",
+    bodyEn: "Hi {first_name},\n\nThank you! Your payment of {amount} for The Beginner's Guide to Stock Trading (VIP Prepay) is confirmed.\n\nOrder number: {order_id}\nYou are first in shipping priority. We will email you shipping updates as the manual is prepared.\n\nIf you have any questions, reply to this email or write to info@grysosta.com.\n\nSimple Knowledge. Brighter Opportunities!\nGeorgino Perez, Founder, GRYSOSTA Stock Trading Academy",
+    bodyEs: "Hola {first_name}:\n\n¡Gracias! Su pago de {amount} por La Guía para Principiantes del Trading de Acciones (Prepago VIP) está confirmado.\n\nNúmero de pedido: {order_id}\nUsted tiene la primera prioridad de envío. Le enviaremos novedades del envío mientras se prepara el manual.\n\nSi tiene preguntas, responda a este correo o escriba a info@grysosta.com.\n\n¡Conocimiento simple. Oportunidades más brillantes!\nGeorgino Perez, Fundador, GRYSOSTA Stock Trading Academy",
+  },
+  {
+    key: "E9", name: "Prepay checkout not completed",
+    subjectEn: "Your Prepay checkout was not completed, {first_name}",
+    subjectEs: "Su pago de prepago no se completó, {first_name}",
+    bodyEn: "Hi {first_name},\n\nYour checkout for The Beginner's Guide to Stock Trading (VIP Prepay, {amount}) was not completed, so no payment was taken.\n\nYou can still get 10% off and first shipping priority:\n{prepay_link}\n\nIf you need help, reply to this email or write to info@grysosta.com.\n\nSimple Knowledge. Brighter Opportunities!\nGeorgino Perez, Founder, GRYSOSTA Stock Trading Academy",
+    bodyEs: "Hola {first_name}:\n\nSu pago por La Guía para Principiantes del Trading de Acciones (Prepago VIP, {amount}) no se completó, así que no se cobró nada.\n\nTodavía puede obtener el 10% de descuento y la primera prioridad de envío:\n{prepay_link}\n\nSi necesita ayuda, responda a este correo o escriba a info@grysosta.com.\n\n¡Conocimiento simple. Oportunidades más brillantes!\nGeorgino Perez, Fundador, GRYSOSTA Stock Trading Academy",
+  },
 ];
