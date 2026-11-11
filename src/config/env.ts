@@ -19,6 +19,12 @@ const schema = z.object({
   ADMIN_EMAIL: z.string().email().default("admin@grysosta.com"),
   ADMIN_PASSWORD: z.string().default(""),
   ADMIN_NAME: z.string().default("Admin"),
+  /** Which sender to use: "smtp" (Gmail or any SMTP server), "brevo" or "console" (log only). Empty = automatic. */
+  EMAIL_PROVIDER: z.enum(["smtp", "brevo", "console"]).optional(),
+  SMTP_HOST: z.string().default("smtp.gmail.com"),
+  SMTP_PORT: z.coerce.number().default(465),
+  SMTP_USERNAME: z.string().default(""),
+  SMTP_PASSWORD: z.string().default(""),
   BREVO_API_KEY: z.string().default(""),
   EMAIL_FROM_NAME: z.string().default("GRYSOSTA Stock Trading Academy"),
   EMAIL_FROM_ADDRESS: z.string().email().default("vip@grysosta.com"),

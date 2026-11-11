@@ -15,6 +15,7 @@ import { activityRouter, reportsRouter } from "./modules/reports/reports.routes"
 import { realtimeRouter } from "./modules/realtime/realtime.routes";
 import { orderRouter } from "./modules/payments/payment.routes";
 import { invitationRouter } from "./modules/invitations/invitation.routes";
+import { buyClickRouter } from "./modules/tracking/tracking.routes";
 
 export const apiRouter = Router();
 
@@ -38,5 +39,6 @@ admin.use("/reports", reportsRouter);             // A13
 admin.use("/activity", activityRouter);           // A1 activity log
 admin.use("/events", realtimeRouter);             // live updates for the panel (SSE)
 admin.use("/orders", orderRouter);                // Prepay orders & payments (Stripe)
-admin.use("/invitations", invitationRouter);      // purchase invitations, batch control
+admin.use("/invitations", invitationRouter);
+admin.use("/buy-clicks", buyClickRouter);         // Buy button clicks (referrer stats)      // purchase invitations, batch control
 apiRouter.use("/admin", admin);
