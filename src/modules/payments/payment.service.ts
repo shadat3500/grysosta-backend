@@ -11,7 +11,9 @@ import { Sale } from "../sales/sales.models";
 import { calcCommission } from "../sales/commission";
 import { salesService } from "../sales/sales.service";
 import { settingsService } from "../settings/settings.service";
+import { contentService } from "../content/content.service";
 import { audit } from "../activity/activity.service";
+import { emailService } from "../emails/email.service";
 import { publish } from "../../common/realtime";
 import { env } from "../../config/env";
 import { AppError, BadRequest, Conflict, Locked, NotFound } from "../../common/errors";
@@ -20,6 +22,13 @@ import { round2 } from "../../common/utils/money";
 export type PrepayInput = z.infer<typeof prepaySchema>;
 type Meta = { ipCountry: string; userAgent: string; visitorHash: string; cookieRef?: string | null };
 type StripeEvent = { type: string; data: { object: Record<string, unknown> } };
+
+/** Cover for the checkout page: the uploaded cover, or the default cover on the site. Stripe needs a public https address. */
+async function checkoutCoverUrl(): Promise<string | undefined> {
+  const uploaded = (await contentService.get()).images?.cover;
+  const url = uploaded || `${env.SITE_URL}/Book-cover%20image.png`;
+  return url.startsWith("https://") ? url : undefined;
+}
 
 export const paymentService = {
   /**
@@ -54,6 +63,10 @@ export const paymentService = {
       lang,
       amountCents: Math.round(amount * 100),
       productName: "The Beginner's Guide to Stock Trading (VIP Prepay)",
+      productDescription: lang === "es"
+        ? "Guía paso a paso para invertir en acciones, por Georgino Perez. Prepago VIP: 10% de descuento sobre el precio regular de $59.99 y primera prioridad de envío."
+        : "A step-by-step guide to stock trading by Georgino Perez. VIP Prepay: 10% off the regular $59.99 price and first shipping priority.",
+      productImageUrl: await checkoutCoverUrl(),
       successUrl: `${env.SITE_URL}/${lang}/prepay/success?session_id={CHECKOUT_SESSION_ID}`,
       cancelUrl: `${env.SITE_URL}/${lang}?prepay=cancelled#prepay`,
     });
@@ -70,9 +83,17 @@ export const paymentService = {
       case "checkout.session.async_payment_succeeded":
         if (obj.payment_status === "paid") await this.markPaid(obj);
         return;
-      case "checkout.session.expired":
-        await Order.updateOne({ stripeSessionId: String(obj.id), status: "pending" }, { status: "expired" });
+      case "checkout.session.expired": {
+        // Checkout left unpaid: mark the order expired and tell the buyer (once; only pending orders change).
+        const order = await Order.findOneAndUpdate({ stripeSessionId: String(obj.id), status: "pending" }, { status: "expired" }, { returnDocument: "after" }).lean();
+        if (order) {
+          const lang = order.language === "es" ? "es" : "en";
+          await emailService.enqueue("E9", { email: order.email, name: order.firstName, lang, memberId: order.memberId ?? null }, {
+            first_name: order.firstName, amount: `$${order.amount.toFixed(2)}`, prepay_link: `${env.SITE_URL}/${lang}#join`,
+          });
+        }
         return;
+      }
       case "charge.refunded": {
         const order = await Order.findOne({ stripePaymentIntentId: String(obj.payment_intent ?? "") }, { _id: 1 }).lean();
         if (order) await this.applyRefund(String(order._id));
@@ -94,6 +115,10 @@ export const paymentService = {
     ).lean();
     if (!order) return; // already processed
     await Member.updateOne({ _id: order.memberId }, { tier: "prepay", prepaidAt: new Date() });
+    // Payment confirmation to the buyer (E8). Runs once: the order was just switched from pending to paid.
+    await emailService.enqueue("E8", { email: order.email, name: order.firstName, lang: order.language === "es" ? "es" : "en", memberId: order.memberId ?? null }, {
+      first_name: order.firstName, amount: `$${order.amount.toFixed(2)}`, order_id: String(order._id).slice(-8).toUpperCase(),
+    });
 
     const s = await settingsService.get();
     const ref = order.referrerId ? await Referrer.findById(order.referrerId, { code: 1, status: 1 }).lean() : null;

@@ -599,7 +599,7 @@ describe("Admin modules", () => {
 
   it("A10 emails: templates, edit, test send", async () => {
     const t = await request(app).get(`${API}/admin/emails/templates`).set(auth());
-    expect(t.body.data.map((x: { key: string }) => x.key)).toEqual(["E1", "E2", "E3", "E4", "E5", "E6", "E7"]);
+    expect(t.body.data.map((x: { key: string }) => x.key)).toEqual(["E1", "E2", "E3", "E4", "E5", "E6", "E7", "E8", "E9"]);
     await request(app).put(`${API}/admin/emails/templates/E1`).set(auth()).send({ subjectEn: "Hello {first_name}!" });
     sentMail.length = 0;
     const s = await request(app).post(`${API}/admin/emails/templates/E1/test`).set(auth()).send({ lang: "en" });

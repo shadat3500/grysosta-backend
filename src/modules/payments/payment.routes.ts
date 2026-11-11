@@ -86,7 +86,7 @@ orderRouter.get("/", validate(listOrdersSchema, "query"), async (req, res) => {
   const map = (o: Record<string, any>) => ({
     id: String(o._id), createdAt: o.createdAt as Date, status: o.status as string, firstName: o.firstName as string, lastName: o.lastName as string, email: o.email as string, language: o.language as string,
     regularPrice: o.regularPrice as number, discount: o.discount as number, amount: o.amount as number, referrer: (o.referrerId as { code?: string } | null)?.code ?? o.referrerCode ?? "",
-    paidAt: (o.paidAt as Date | null) ?? null, refundedAt: (o.refundedAt as Date | null) ?? null, stripeSessionId: (o.stripeSessionId as string | undefined) ?? "",
+    paidAt: (o.paidAt as Date | null) ?? null, refundedAt: (o.refundedAt as Date | null) ?? null, stripeSessionId: (o.stripeSessionId as string | undefined) ?? "", stripePaymentIntentId: (o.stripePaymentIntentId as string | undefined) ?? "",
   });
   if (q.format !== "json") {
     const all = await Order.find(f).sort({ createdAt: -1 }).populate("referrerId", "code").lean();
